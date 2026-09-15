@@ -1,0 +1,14 @@
+# Generated indexes — regenerate per build, never commit (see README.md).
+methods.pkl
+rva2025.pkl
+out/
+__pycache__/
+*.pyc
+
+# Carved game data — derived from the client binary, do not redistribute.
+carve/out/
+ga_image.bin
+metadata.bin
+global-metadata.dat
+GameAssembly.dll
+*.obj

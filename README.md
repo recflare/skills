@@ -17,8 +17,19 @@ loads on demand from its description; the bulk sits in `references/` and is only
 | [`rr-client-bringup`](.claude/skills/rr-client-bringup/SKILL.md) | The client crashes, quits silently, or never finishes loading a room; choosing an injection vector for a new build. |
 | [`il2cpp-analysis`](.claude/skills/il2cpp-analysis/SKILL.md) | Before trusting any obfuscated name, RVA or enum value: carving metadata, driving the toolkit, telling builds apart. |
 
-`il2cpp-tools.zip` holds the scripts the skills invoke. `SCENES.md` is the scene-location GUID
-table; `INVENTIONS.md` covers the invention pipeline.
+## The toolkit
+
+`tools/il2cpp/` holds the scripts the skills invoke — analysis scripts at the root, the live-process
+carve pipeline in `carve/`, and `README.md` covering both. `il2cpp-tools.zip` is the older bundle of
+the same thing, kept for the prebuilt `metadump.exe`; the directory is the current copy.
+
+**The generated indexes are not committed** — `methods.pkl`, `rva2025.pkl` and
+`out/stringliteral.json` are derived from the game binary, run to tens of megabytes, and are valid
+for exactly one build. Run `carve/` to produce them, then check the anchor before trusting any name:
+RVA `0x77E0950` must resolve to `BestHTTP.HTTPManager$$SendRequest` on `20250718.01`. A stale index
+does not error — it answers, wrongly.
+
+`SCENES.md` is the scene-location GUID table; `INVENTIONS.md` covers the invention pipeline.
 
 ## Two things to know before using any of this
 

@@ -25,6 +25,11 @@ at rest, and the PE-loader fallback dies on the Referee import. `recflare-2025-m
 the live-process carve pipeline that produces a real `global-metadata.dat`, a decrypted
 `GameAssembly.dll`, `methods.pkl` and `out/stringliteral.json`.
 
+The pipeline and every analysis script are in **`tools/il2cpp/`** in this repo; its README has the
+run order, the per-script table and the build-specific constants you must copy across for a new
+client. The indexes themselves are deliberately not committed — regenerate and verify the anchor
+(`0x77E0950` -> `BestHTTP.HTTPManager$$SendRequest` on `20250718.01`) before trusting a name.
+
 ## Reading values, not just names
 
 - **Enum member values** are zigzag-compressed ints in `fieldDefaultValues`; a raw little-endian read

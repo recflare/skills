@@ -33,9 +33,13 @@ in this file that names `dump.cs` or `script.json` is the pre-2025 flow.
 
 ## Setup (once per game build)
 
-Tools are in `il2cpp-tools.zip`; see its README for the tier split and the env vars
-`GAMEASSEMBLY`, `GA_IMAGE`, `GA_METADATA`. Run scripts from the directory holding `methods.pkl`
+Tools are in **`tools/il2cpp/`** in this repo — `tools/il2cpp/README.md` has the tier split, the
+per-script table and the gotchas. **Set `GAMEASSEMBLY`, `GA_IMAGE` and `GA_METADATA` explicitly**;
+the in-script defaults are absolute paths from the machine the toolkit was written on and will
+silently read whatever happens to be there. Run scripts from the directory holding `methods.pkl`
 and `out/stringliteral.json`.
+
+The generated indexes are **not** in the repo (build-specific and large) — `carve/` produces them.
 
 For a carved build, run `carve/` first — `metadump.exe` (passive reader, start it before the game),
 then `solve_header.py` → `idtables{,2,3}.py` → `rebuild_metadata.py` → `rebuild_binary.py` →
