@@ -7,6 +7,9 @@ the formatters, the disassembly and the metadata — not from any server impleme
 Drop the repo somewhere Claude Code can see it, or copy `.claude/skills/` into a project. Each skill
 loads on demand from its description; the bulk sits in `references/` and is only read when needed.
 
+**New here? [`PROMPTS.md`](PROMPTS.md) has a copy-pasteable opener for each skill** — start with the
+wire-shape lookup, which answers from the catalog without touching the binary.
+
 ## The skills
 
 | Skill | Use it when |
