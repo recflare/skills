@@ -9,11 +9,15 @@ The self-hosted server has to emit exactly what the client's Utf8Json formatters
 is IL2CPP and obfuscated, so you cannot read this from decompiled managed code — you recover it from
 the generated formatters in `GameAssembly.dll`.
 
-**Check what's already documented first.** Findings live in the *server* repo,
-`C:/Games/recflare-source` — notification frames in `apps/notify/src/notification-types.ts` and
-`notification-payloads.ts`, and `OBJECTIVES.md` in this repo for `api/config/v2`. `SCENES.md` here
-has the scene-location GUID table. If the answer is already there, stop. When you derive something
-new, write it up in the server repo beside the code that sends it, not here.
+**Check the catalog first.** `references/CATALOG.md` indexes every route already derived — grep it
+for a path fragment and read the one file it names. `references/conventions/` holds the cross-cutting
+rules (service enum, envelope tiers, the two exception types, the verb-dependent parameter trap).
+`SCENES.md` in this repo has the scene-location GUID table. If the answer is there, stop.
+
+**The client binary is the only evidence.** What a server currently sends is not evidence of what the
+client accepts — a route can be wrong in production and still "work" because nothing reads the field.
+Derive the shape from the formatters, then compare. When you derive something new, add a file under
+`references/endpoints/` and a row to `CATALOG.md`.
 
 ## Which flow applies
 
@@ -47,6 +51,26 @@ then `solve_header.py` → `idtables{,2,3}.py` → `rebuild_metadata.py` → `re
 > metadata table offsets, `METADATA_REGISTRATION_RAW`, `TD_N`, `LOAD_BASE`. A new client changes all
 > of them; the `idtables*` stages print the replacements.
 
+## Already derived
+
+**[`references/CATALOG.md`](references/CATALOG.md)** — 75 routes, one file each, indexed by service
+and path. Grep it before deriving anything.
+
+### Cross-cutting rules
+
+| Rule | What it settles |
+|---|---|
+| [elhkhfjehlm-verb-dependent-params](references/conventions/elhkhfjehlm-verb-dependent-params.md) | CORRECTION: MGPBDIAGCFD.ELHKHFJEHLM is NOT a query-param adder — it branches on the verb. GET puts params in the query string; every other verb puts them in an application/x-www-form-urlencoded BODY. |
+| [ioncmjiacfi-malformed-response](references/conventions/ioncmjiacfi-malformed-response.md) | IONCMJIACFI 'Malformed Response' in recflare-2025 is thrown by MGPBDIAGCFD.KKEIDMPEHAL<T> when the body is empty or fails to deserialize into T — a '{}' body means the endpoint expects an ARRAY or a scalar, not an object. |
+| [llcldppagij-envelope-failure-exception](references/conventions/llcldppagij-envelope-failure-exception.md) | LLCLDPPAGIJ is recflare-2025's generic 'RecNet envelope reported failure' exception — thrown only when an ENVELOPED response is null or Success==false, never by a bare-DTO endpoint. |
+| [nonobject-response-routes](references/conventions/nonobject-response-routes.md) | The 145 routes whose response T is a List or scalar — i.e. every endpoint that hard-fails with `Malformed Response: '{}'`. Generated table at il2cpp-2025/nonobject-responses.txt, plus the scan that rebuilds it. |
+| [recnet-service-enum](references/conventions/recnet-service-enum.md) | The full RecNet service enum NNPMGHNBFMD for build 20250718.01 — 31 unobfuscated member names with values (Auth 1, API 2, Lists 13, Rooms 16, Econ 28 …); the number every wire-shape note calls 'svc N'. |
+
+Two exception types are worth recognising on sight: `IONCMJIACFI` ("Malformed Response") means the
+body would not deserialize into `T` — a `{}` body against a `List` or scalar `T` is the classic case,
+and `nonobject-response-routes` is the candidate list. `LLCLDPPAGIJ` means an **enveloped** response
+was null or `Success == false`, so a bare-DTO endpoint can never raise it.
+
 ## HTTP endpoint → response shape
 
 1. **Find the endpoint literal.** `grep -in "<path fragment>" out/stringliteral.json`.
@@ -69,7 +93,7 @@ then `solve_header.py` → `idtables{,2,3}.py` → `rebuild_metadata.py` → `re
    | `CNDMDLNHDLI` | send, no response — **body ignored entirely** |
    | `KBIHOFDDIMI` | raw response |
    | `ELKIBCPINAP(byte[])` | sets the **request body** — its presence means there is one |
-   | `ELHKHFJEHLM(name, value)` | adds a **query param** (`?id=`, `?type=` come from here) |
+   | `ELHKHFJEHLM(name, value)` | adds a parameter — **query string on GET, form body on every other verb**. See `references/conventions/elhkhfjehlm-verb-dependent-params.md`; reading this as "query param" silently mis-specifies every non-GET route |
 
    API classes also expose a class-bound `LMKONLJOAEP<T>` wrapper that does the same thing.
    *(Pre-2025 names for the same roles: `BGBHKBJEMPI.OGJBBIDJGFI` / `DDKPNIIFDNB` / `ONDBGFGJBDE` /
@@ -93,6 +117,11 @@ pinned to `StorePageDiscoveryDisplayMetadata` when the adjacent slot said otherw
 | `JFNAKFCGDAO` | `{Success, Error, error_id}` — no value; typical for writes |
 | `KGOJLHJNIOD<T>` | adds `Value` — single object |
 | `GJAFHDAFBNE<T>` | adds `Value` — list |
+
+Envelope status is **per-helper, not per-facade** — the same API class exposes both bare and enveloped
+helpers. The tell is a leading `friendlyActionDescription` string on the helper: present means
+enveloped, absent means bare. `references/endpoints/rooms-showcase-wire-shape.md` records how
+assuming otherwise went wrong.
 
 `error_id` is lowercase (`[DataMember]`); `Success`/`Error`/`Value` are PascalCase. Which tier
 applies is **per-endpoint and not inferable from the path or from a sibling endpoint**.
