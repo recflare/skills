@@ -34,6 +34,9 @@ UI, and only the log line distinguishes them.
   or instance id, so you must map account to instance yourself.
 - **You cannot read the client's handshake fields:** `voice-rsa-key-swap` - one static-field write
   swaps the hardcoded public key for yours, with a built-in self-test.
+- **A departed player keeps logging "Failed to find player for voice playback":**
+  `voice-stale-playback-on-leave` - the voice server never removed them from the Dissonance
+  session; broadcast RemoveClient (type 0). The client cannot clean the playback up itself.
 
 ## Traps
 
@@ -57,3 +60,4 @@ UI, and only the log line distinguishes them.
 | [voice-roster-account-id](references/voice-roster-account-id.md) | How recflare-2025 knows who is in voice — the Dissonance SESSION roster from the voice server, keyed by the ACCOUNT ID as a decimal string. VoiceServerId plays no part. |
 | [voice-rsa-key-swap](references/voice-rsa-key-swap.md) | How to swap the hardcoded Tachyon RSA public key for your own so the server can decrypt CKA/CIA and read AT — single static-field write at BAOFAOBLAMJ..ctor 0x82795E0, plus the decrypt recipe and a free self-test via VB. |
 | [voice-stack-package-versions](references/voice-stack-package-versions.md) | Dissonance/NGO/LiteNetLib package fingerprint for recflare-2025 voice — assembly versions are stripped, so fingerprint by API surface; NGO is trimmed to messaging only (7 message types). |
+| [voice-stale-playback-on-leave](references/voice-stale-playback-on-leave.md) | A repeating "RecRoomVoicePlayback: Failed to find player for voice playback: {id} after {n} updates" after someone leaves means the VOICE server never removed them from the Dissonance session — fix is to broadcast RemoveClient (type 0); the client cannot clean up the playback object itself. |

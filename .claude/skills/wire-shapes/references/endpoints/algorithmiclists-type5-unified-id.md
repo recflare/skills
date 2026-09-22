@@ -7,9 +7,16 @@ Extends [algorithmiclists-wire-shape](algorithmiclists-wire-shape.md) (which has
 body and the `KJMOLELGPPF` type enum).
 
 **The `type` query param, not the path segment, decides what `Id` means.** The serving-endpoint
-segment (`newitems`, `HotList`, …) is a free-form string parameter — `'newitems'` is **not** a literal
-in `GameAssembly.dll`, so it comes from a discovery-section config, and the client has no opinion
-about it. What the client *does* branch on is which caller issued the request:
+segment (`newitems`, `HotList`, `customizeitems`, …) is a free-form string parameter — `'newitems'`
+and `'customizeitems'` are **not** literals in `GameAssembly.dll`, so the name comes from server-side
+config and the client has no opinion about it. (Positive control: `HotList` and `newitems`-style
+baked names that *do* exist return 1 hit each, so a 0 here is real.)
+
+**One such config key is known:** `customizeitems` is supplied by the game config
+**`AvatarCustomization.FeaturedItemsEndpoint`** (established 2026-09-15 from the config side, not
+from the binary). So `GET lists/algorithmiclists/customizeitems?type=5` is the avatar-customization
+screen's featured-items row, and the endpoint name is **renameable server-side** — change that
+config value and the client requests the new name, with no client change. What the client *does* branch on is which caller issued the request:
 
 | caller | `mov dl,` | `type` |
 |---|---|---|

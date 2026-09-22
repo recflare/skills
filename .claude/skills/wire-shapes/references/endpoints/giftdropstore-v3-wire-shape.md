@@ -90,3 +90,53 @@ is omittable.
 `AvatarItemType`; leave `0x38`/`0xb8` alone — they have no keys. Serving a desc the client's baked
 `descToCaidMapping` does not contain still yields a silent drop with no log
 ([avatar-item-desc-registry](../../../rr-client-bringup/references/avatar-item-desc-registry.md)) — that failure is downstream of this payload, not caused by it.
+
+## Newer-server variant: `AvatarItemInfo` and 4 other keys (2026-09-15)
+
+A capture may show a **27-key** `GiftDrop`. That is a **newer Rec Room version than `20250718.01`**,
+not an error in this note. Reference data in `Vanadium-2023-2025-Leak-Server/Data/Storefronts/`
+(files named by `StorefrontType`, which independently confirms the enum) contains three vintages
+that nest **strictly**:
+
+| vintage | GiftDrop keys | sample |
+|---|---|---|
+| older than this build | 17 | `1.json` (LaserTag), `3.json` (Watch) |
+| **`20250718.01` (this note)** | **22** | — |
+| newer | 27 | `2.json` (RecCenter) |
+
+`17 ⊂ 22 ⊂ 27` with no key ever removed, which is what fixes the ordering. The 17-key vintage lacks
+`TagList`, `CustomAvatarItemId`, `AvatarItemId`, `EquipmentItemId`, `ThumbnailImageName`; the 27-key
+vintage adds **`AvatarItemInfo`, `ItemCount`, `QueryRedirectContext`, `QueryRedirectTag`,
+`QueryRedirectRarity`**.
+
+**None of the five exists in `20250718.01`.** `"AvatarItemInfo"` has **0 occurrences** in
+`out/stringliteral.json` in any casing — decisive, because Utf8Json keys are emitted as string
+literals (positive control: `ThumbnailImageName`, `ItemSetFriendlyName`, `AvatarItemDesc`,
+`AvatarItemId`, `AvatarItemType` each return 1). Sending them to this client is **silently dropped**,
+per the usual unknown-key rule.
+
+`AvatarItemInfo` is a v2 wrapper that supersedes the legacy avatar-item triple; the newer server
+sends **both**, so the payload stays backward compatible:
+
+```json
+"AvatarItemInfo": { "Version": 2,
+  "LegacyAvatarItemDesc": "6b337a35-95d9-4b3a-9891-d9fbb06262aa",
+  "DownloadableAvatarItemId": "5f00002b-8092-438c-8763-cc8ebd7eaf4d",
+  "AvatarItemType": 0, "LegacyAvatarItemRowId": 360 }
+```
+
+Correlation across all 9 populated instances in `2.json` is exact:
+
+| `AvatarItemInfo` field | legacy equivalent this client reads |
+|---|---|
+| `LegacyAvatarItemDesc` | `AvatarItemDesc` **with the trailing commas stripped** (`"<guid>,,,"` → `"<guid>"`) |
+| `LegacyAvatarItemRowId` | `AvatarItemId` |
+| `AvatarItemType` | `AvatarItemType` |
+| `DownloadableAvatarItemId` | **no equivalent** — the new downloadable-avatar-item system, which this build has no concept of |
+| `Version` | always `2` |
+
+It is `null` when the drop carries no avatar item (`AvatarItemDesc: ""`, `AvatarItemId: 0`).
+
+**So for `20250718.01`: keep populating the legacy fields and ignore `AvatarItemInfo`.** Relaying a
+newer capture verbatim is safe — the legacy keys are still present and are what this client reads.
+The one thing that cannot be carried back is `DownloadableAvatarItemId`.

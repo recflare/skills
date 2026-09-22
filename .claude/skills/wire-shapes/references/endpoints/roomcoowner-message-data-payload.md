@@ -96,3 +96,76 @@ Note that send signature: `data` and `roomId` are separate arguments — the roo
 
 (`"30"` = CoOwner; use `"31"` for TemporaryCoOwner. Wrapped in the notification envelope
 `{"Msg": {...}, "Id": "<string>"}` when pushed — see [messages-v2-message-type-payloads](messages-v2-message-type-payloads.md).)
+
+## The 0–20 block of the same factory (resolved 2026-09-15)
+
+Same method `PFFCBNBJIFG.BCIOENDEHAE` `0x22E30C0`. Low types are reached by a binary-search chain
+(`cmp ebx,0x64 / 0x29 / 0x1e` …) ending at `cmp ebx,0x14; ja default` and a dense jump table at
+RVA **`0x22E3C08`** (base 0, entries are absolute RVAs).
+
+| Type | handler class | case |
+|---|---|---|
+| 0 `DEPRECATED_GameInvite` | `.IGMGEFIPJAH` | `0x22E3A34` |
+| 1 `GameInviteDeclined` | `.EMJAJEHOENC` | `0x22E3988` |
+| 2 `GameJoinFailed` | `.BIPDDNGOOKK` | `0x22E39B3` |
+| 3 `DEPRECATED_PartyActivitySwitch` | `.DGBDBAMAKNI` | `0x22E3A5F` |
+| **4 `FriendInvite`** | **`.OKDMMKBAJHB`** | `0x22E39DE` |
+| 5 `VoteToKick` | `.DHALBKMDJDB` | `0x22E3A09` |
+| 6 `GameInviteV2` | `.IGMGEFIPJAH` (same as 0) | `0x22E3A34` |
+| 7 `PartyActivitySwitchV2` | `.DGBDBAMAKNI` (same as 3) | `0x22E3A5F` |
+| 8 `PartyInvite` | `.GJFHFAPOLDO` | `0x22E3A8A` |
+| 10 `RequestGameInvite` | `.MOMBPGGGLOG` | `0x22E3AB5` |
+| 11 `RequestGameInviteDeclined` | `.DHLCEGHPPDO` | `0x22E3AE0` |
+| 20 `FriendStatusOnline` | `.NEKFABILFEF` | `0x22E3B0B` |
+| 9, 12–19 | **default → `throw NotImplementedException`** | `0x22E3B62` |
+
+⚠️ **The default arm throws `System.NotImplementedException`**, it does not return null. Those gap
+values are not `KHAAMCHNGDI` members, so `Enum.IsDefined` filters them before the factory sees them
+— but a *new* type value that passes the filter with no handler would throw here.
+
+### `FriendInvite (4)` does not use `Data`
+
+Checked both mechanisms the correction above demands:
+- **No eager parse** — 4 has no case in `PNAFJFAEEEE.CPOBHIECLEN`, so it falls to the default arm.
+- **No lazy parse** — `OKDMMKBAJHB`'s 15 methods never dereference the Message's `Data` at `+0x30`
+  (they read the handler's own `+0x10`/`+0x18`/`+0x20` and the message at `+0x58`), and neither does
+  `AMAMAAGEIPI.PECGJFLFANL` `0x7D4DF30`, the one helper they hand the whole message to.
+
+So `Data` may be `null`, `""` or anything; `FromPlayerId` carries the inviting player.
+*Scope of that check: the handler's own methods plus its one delegated helper — not an exhaustive
+proof that nothing anywhere keys on `Type == 4`.*
+
+### Refinement: `VoteToKick (5)` does have a handler
+
+[messages-v2-message-type-payloads](messages-v2-message-type-payloads.md) says "No consumer keyed to `Type == 5` turned up." The
+factory **does** construct `.DHALBKMDJDB` for type 5, so a consumer class exists. Whether it reads
+`Data` is not yet checked — that note's conclusion that `Data` is schema-free for VoteToKick rests
+on the eager switch only, and should be re-verified against `DHALBKMDJDB` before being relied on.
+
+### `FriendRequestAccepted (40)` and `FriendCodeUsed (41)`
+
+Reached by the same binary-search chain (`cmp ebx,0x1e` → `cmp ebx,0x28` / `cmp ebx,0x29`), not the
+`0x22E3C08` jump table:
+
+| Type | handler class | case |
+|---|---|---|
+| **40 `FriendRequestAccepted`** | **`.PELLKEDEKNE`** | `0x22E390D` |
+| 41 `FriendCodeUsed` | `.BCHLLDGNEON` | `0x22E3941` |
+
+**`FriendRequestAccepted` does not use `Data`** — same two checks as type 4:
+- **No eager parse** — 40 has no case in `PNAFJFAEEEE.CPOBHIECLEN`.
+- **No lazy parse** — `PELLKEDEKNE` has only 7 methods (4 with real bodies) and dereferences nothing
+  but the message pointer at `+0x58`; no `+0x30`. Following the chain two levels further —
+  `AMBNCBOBOHH.OOOMEICMMML` `0xD05C00` → `IHCAGKGKJLH.FPKACMLMJPI` `0xCFB640` — turns up no `+0x30`
+  either (the second reads no message field at all). Contrast the Data-using pattern at the top of
+  this note: `RoomCoOwnerInvited` has a cached-parse field on its base *and* a dedicated parse
+  method; `PELLKEDEKNE` has neither.
+
+So `Data` may be `null`, `""` or anything; `FromPlayerId` carries the player who accepted.
+
+**Behaviour:** `PELLKEDEKNE.IDCLNJODFPP` `0xD015B0` calls `RecRoom.Core.WatchUI.get_Local` then
+**`RecRoom.Core.WatchUI.ShowIntroduceFriendsDialog`** `0x18848B0` — acting on this notification opens
+the Introduce-Friends dialog. Text comes from `NAALCJNAPMC` `0xD016C0` via the base helper plus
+`String.Concat`, not from `Data`.
+
+Both 4 and 40 map to watch category `FriendRequests (2)` ([party-invite-accept-gate](party-invite-accept-gate.md)).
