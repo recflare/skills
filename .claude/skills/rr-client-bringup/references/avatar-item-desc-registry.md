@@ -81,6 +81,11 @@ LZ4-compressed, so even the known-good control guid isn't found) but is no longe
 `il2cpp-2025/bundlescan.py` + `lz4b.py` now decompress all 2745 bundles in ~85 s and grep them —
 see [unity-bundle-text-scanning](../../il2cpp-analysis/references/unity-bundle-text-scanning.md). Always run its positive control first.
 
+⚠️ **Two traps that produce a clean `hits=0` on a build that does contain the string** (both hit
+2026-09-23, both now fixed//documented in that note): the scanner aligned on `flags & 0x200` instead of
+`version >= 7`, which silently emptied **every** bundle of the v7 `20230414` build; and the 2023 data
+dir is `RecRoom_Data`, not `Recroom_Release_Data`.
+
 ⚠️ Caveat: `bundlescan.py` searches **ASCII and UTF-16 text only**. Whether that finds an
 `AvatarItemDesc` guid depends on how the wardrobe asset serializes it — Unity cannot serialize
 `System.Guid` directly, so the shipped `builtinAvatarItemDataDictionary` plausibly stores the guids

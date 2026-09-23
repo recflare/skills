@@ -13,9 +13,11 @@ for fn in files:
     try:
         b=open(p,'rb').read()
         if b[:7]!=b'UnityFS': continue
-        o=b.index(b'\0')+1; o+=4; o=b.index(b'\0',o)+1; o=b.index(b'\0',o)+1
+        o=b.index(b'\0')+1; ver=struct.unpack_from('>I',b,o)[0]; o+=4; o=b.index(b'\0',o)+1; o=b.index(b'\0',o)+1
         size,cbi,ubi,flags=struct.unpack_from('>QIII',b,o); o+=20
-        if flags & 0x200: o=(o+15)&~15
+        # UnityFS aligns the header for version>=7. Testing only the 0x200 flag MISSES v7
+        # bundles (Unity 2020 / the 20230414 build): payload decodes EMPTY with no error.
+        if ver>=7 or (flags & 0x200): o=(o+15)&~15
         bi=lz4_decompress(b[o:o+cbi],ubi) if (flags&0x3F) in (2,3) else b[o:o+cbi]
         o+=cbi
         q=16; cnt=struct.unpack_from('>I',bi,q)[0]; q+=4
