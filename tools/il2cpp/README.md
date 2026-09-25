@@ -132,6 +132,11 @@ All tier A — they work on a carved build.
 | `notifall.py` / `notifreport.py` | sweep websocket notification registrations; produced `notifications-2025.txt` |
 | `bundlescan.py <dir> <terms> [limit]` | decompress and grep Unity addressable bundles (2745 of them in ~85 s) |
 | `lz4b.py` | pure-Python LZ4 block decompressor `bundlescan.py` depends on |
+| `aacatalog.py <aa-dir> <key...>` | Addressables catalog.json lookup: asset GUID -> asset path -> owning .bundle (first listed) + its deps |
+| `bundlepeek.py <dir> <bundles> <needles>` | decompress named bundles and say which one actually contains a string — the confirmation step after `aacatalog.py` |
+| `caiexport.py build\|verify` | build or verify a CustomAvatarItem export folder byte-identically (SHA-256 hashes, System.Text.Json default encoder, duplicated `N_save.json`) |
+| `descresolve.py <data-dir> <desc>` | AvatarItemDesc -> registry -> asset guid -> catalog -> `Assets/.../(Name).prefab` + owning bundle; prints the **system name**. No item name needed. Tries both desc spellings and multi-token keys. |
+| `caiids.py <desc>` | deterministic, v4-shaped `CustomAvatarItemId` / `UnityAssetId` derived from the DESC (the unique key -- the system name is not, several descs share one). Canonicalises spelling/commas first, so a re-export never mints a duplicate. |
 
 `enumvals.py` raises on a type that is not an enum — that is the check, not a bug.
 

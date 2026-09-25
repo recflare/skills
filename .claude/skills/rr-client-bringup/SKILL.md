@@ -47,6 +47,7 @@ rebuilding a client from first principles.
 | Reference | What it settles |
 |---|---|
 | [avatar-item-desc-registry](references/avatar-item-desc-registry.md) | 2025 client resolves AvatarItemDesc through a CLIENT-BAKED descToCaidMapping built in Awake from the shipped wardrobe asset; an unknown desc is dropped SILENTLY with no log, and no server payload can add one |
+| *(moved)* [rr-avatar-assets](../rr-avatar-assets/SKILL.md) | Resolving an AvatarItemDesc to the shipped asset/bundle, and packaging shipped items as CustomAvatarItem exports, now live in their own skill — `desc-registry-2023-layout` and `cai-export-format` moved there. |
 | [bepinex-crashes-new-build](references/bepinex-crashes-new-build.md) | Why BepInEx stopped working after the 2026-07 Rec Room upgrade and how the diagnosis was reached |
 | [build-20230414-obfuscation](references/build-20230414-obfuscation.md) | Installed Rec Room build at recflare-client is now manifest 3332492622123310277 (was 20230414 / 3668280474894052876); per-build obfuscated target names for Photon, EAC, Amplitude promise |
 | [build-23191908-dump-and-rvas](references/build-23191908-dump-and-rvas.md) | Full RVA-annotated Cpp2IL source dump for build 23191908 (2026-05-12) lives at C:\\Games\\RecRoom_Info; hook RVAs + the finding that TLS is in-process-only (BouncyCastle custom verifier, not system store) |

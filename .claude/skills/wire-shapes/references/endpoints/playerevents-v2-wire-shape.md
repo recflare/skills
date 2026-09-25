@@ -30,7 +30,16 @@ derived member first, per Utf8Json inheritance order: `Tags`, then `PlayerEventI
 `SupportMultiInstanceRoomChat`, `DefaultBroadcastPermissions`, `CanRequestBroadcastPermissions`,
 `BroadcastingRoomInstanceId` long?.
 
-`TagModifyResult` = `{Result, Tags}`. `Result` enum `CPIAPAGENIK`, 0-based: Success 0,
+`TagModifyResult` = `EKDKFKMDIIO` `{Result, Tags}`, where **`Tags` is `List<string>`** (unlike
+`PlayerEvent.Tags`, which is `List<{Tag,Type}>` on BOTH builds — see
+[playerevent-tags-build-difference](playerevent-tags-build-difference.md)).
+
+⚠️ **CORRECTED 2026-09-23: `TagModifyResult.Result` is its OWN enum `CJJEIGDCFGB`, not the event
+`CPIAPAGENIK`** — 11 members, tag-specific: `Success 0`, `TooManyTags 1`, `TagUseRestricted 2`,
+`InvalidTag 3`, `InappropriateTag 4`, `TagTooLong 5`, `TagNotFound 6`, `TagAlreadyExists 7`,
+`NoChange 8`, `TagRepeated 9`, `LacksPermission 10`.
+
+The **event-level** `Result` is `CPIAPAGENIK`, 36 members, 0-based: Success 0,
 HasModeratorClosedEvent 1, DoesNotExist 2, PlayerDoesNotExist 3, RoomDoesNotExist 4,
 StatusUnchanged 5, PrivateEvent 6, SomethingWentWrong 7, DoesNotOwnRoom 8, ResponseDoesNotExist 9,
 PlayerAlreadyInvited 10, EventDatesInvalid 11, EventTooLong 12, EventTooShort 13,
@@ -111,3 +120,18 @@ the v2 `PlayerEvent` list minus `Tags`: `PlayerEventId`, `CreatorPlayerId`, `Roo
 are actually an **`application/x-www-form-urlencoded` request body** — `ELHKHFJEHLM` routes params
 to the query string only for GET. See [elhkhfjehlm-verb-dependent-params](../conventions/elhkhfjehlm-verb-dependent-params.md). Response shape
 unaffected.
+
+
+## ⚠️ Two corrections to this note (2026-09-23)
+
+1. **`TagModifyResult.Result` is `CJJEIGDCFGB`**, an 11-member tag-specific enum — not the 36-member
+   event `CPIAPAGENIK`. Both start `Success = 0`, which is why the mix-up survived: the success path
+   looks identical and only error codes diverge.
+2. **`PlayerEvent.Tags` is `List<{Tag,Type}>` on the 2025 build too**, not `List<string>` — see
+   [playerevent-tags-build-difference](playerevent-tags-build-difference.md). A response that is otherwise byte-perfect and
+   returns **200** is still rejected wholesale by the client if this field carries bare strings, so
+   the event is created server-side while the client reports failure.
+
+The user-facing message for an event `Result` is produced by
+`LAEMBKPAEHH.JOGBEKHJAFI(CPIAPAGENIK) -> string` `0x7C68140` — 24 distinct strings, `Result 0` maps
+to `"Success!"`. Useful in reverse: an on-screen message names the code the client believes it got.

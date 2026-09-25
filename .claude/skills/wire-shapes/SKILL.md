@@ -57,7 +57,7 @@ then `solve_header.py` → `idtables{,2,3}.py` → `rebuild_metadata.py` → `re
 
 ## Already derived
 
-**[`references/CATALOG.md`](references/CATALOG.md)** — 75 routes, one file each, indexed by service
+**[`references/CATALOG.md`](references/CATALOG.md)** — 86 routes, one file each, indexed by service
 and path. Grep it before deriving anything. (`PROMPTS.md` at the repo root has ready-made openers for
 looking one up, deriving a missing one, and checking a live capture against the client.)
 
@@ -68,6 +68,7 @@ looking one up, deriving a missing one, and checking a live capture against the 
 | [elhkhfjehlm-verb-dependent-params](references/conventions/elhkhfjehlm-verb-dependent-params.md) | CORRECTION: MGPBDIAGCFD.ELHKHFJEHLM is NOT a query-param adder — it branches on the verb. GET puts params in the query string; every other verb puts them in an application/x-www-form-urlencoded BODY. |
 | [ioncmjiacfi-malformed-response](references/conventions/ioncmjiacfi-malformed-response.md) | IONCMJIACFI 'Malformed Response' in recflare-2025 is thrown by MGPBDIAGCFD.KKEIDMPEHAL<T> when the body is empty or fails to deserialize into T — a '{}' body means the endpoint expects an ARRAY or a scalar, not an object. |
 | [llcldppagij-envelope-failure-exception](references/conventions/llcldppagij-envelope-failure-exception.md) | LLCLDPPAGIJ is recflare-2025's generic 'RecNet envelope reported failure' exception — thrown only when an ENVELOPED response is null or Success==false, never by a bare-DTO endpoint. |
+| [number-token-parsing-exception](references/conventions/number-token-parsing-exception.md) | Utf8Json NKJABNHBPCA "expected:'Number Token', actual:'['" is NOT IONCMJIACFI — it means T is a bare `long?`. Exactly two routes in 20250718.01 are: GET dormroom/me (Rooms) and GET api/progressionEvents/active (API). |
 | [nonobject-response-routes](references/conventions/nonobject-response-routes.md) | The 145 routes whose response T is a List or scalar — i.e. every endpoint that hard-fails with `Malformed Response: '{}'`. Generated table at il2cpp-2025/nonobject-responses.txt, plus the scan that rebuilds it. |
 | [recnet-service-enum](references/conventions/recnet-service-enum.md) | The full RecNet service enum NNPMGHNBFMD for build 20250718.01 — 31 unobfuscated member names with values (Auth 1, API 2, Lists 13, Rooms 16, Econ 28 …); the number every wire-shape note calls 'svc N'. |
 
