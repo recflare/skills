@@ -23,7 +23,6 @@ Not paged — no `{Results, TotalResults}`; the client infers "end" from a short
 | `ReplicationId` | string | |
 | `CreatorPlayerId` | ObscuredInt | plain number |
 | `Name`, `Description`, `LongDescription`, `ImageName` | string | |
-| `UgcVersion` | **byte** | |
 | `CurrentVersionNumber`, `LatestVersionNumber` | int | |
 | `Accessibility` | `KLKIFENPGNG` | `Private 0`, `Public 1`, `Unlisted 2` |
 | `ForceCannotPublish` | bool | |
@@ -35,7 +34,8 @@ Not paged — no `{Results, TotalResults}`; the client infers "end" from a short
 | `IsAGInvention`, `IsCertifiedInvention`, `IsRecRoomApproved`, `AllowTrial` | ObscuredBool | plain true/false |
 | `Price` | int? | |
 | `HideFromPlayer` | bool | |
-| `DisplayMetadataJson` | string | nested JSON as an escaped STRING |
+| `DisplayMetadataJson` | string | nested JSON as an escaped STRING; key `"0"` is `ChipsCost`, e.g. `"{\"0\":47,\"99\":0}"` |
+| `UgcVersion` | **byte** | ⚠️ format discriminator the client FILTERS on — a wrong value hides the row with no error, see [inventions-v2-mine](inventions-v2-mine-wire-shape.md) |
 
 `KGCKBAIOBNL` permission enum: `Unassigned 0`, `LimitedOneUseOnly 10`, `DisallowKeyLock 15`,
 `UseOnly 20`, `EditAndSave 40`, `Publish 60`, `Charge 80`, `Unlimited 100`.

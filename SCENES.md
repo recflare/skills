@@ -73,3 +73,25 @@ cd il2cpp-2025 && python rangedis.py 89b7290 89b7b90     # key literal, then mov
 
 `INVALID = -1` has no GUID — it is the parse-failure sentinel, never sent by the server.
 Value **29 is unused** in the enum, so there are 50 scenes for values 0–50.
+
+## Unity scene names (observed, not from the binary)
+
+`Player.log` prints both halves of the mapping during a room load, so the Unity scene name for a
+scene-location enum can be read straight off a capture:
+
+```
+[LoadScene(MAKER_ROOM)]:      ...
+[Load Scene Basement]:        ...
+```
+
+| CFCLEMKANPO | Unity scene |
+|---|---|
+| 0 `DORM_ROOM` | `dormroom2` |
+| 24 `MAKER_ROOM` | `Basement` |
+
+**`Basement` is `MAKER_ROOM`, not a fallback.** This matters when diagnosing "my custom room loads
+as the Maker Room": the client's *silent* fallback is `DORM_ROOM`/`dormroom2`, and it is always
+accompanied by the warning *"RecNet game session contains unknown scene location ID"*. Seeing
+`Basement` with no warning means the server deliberately reported
+`a75f7547-79eb-47c6-8986-6767abcb4f92`, and an empty-looking room is then a missing **subroom save**,
+not a wrong scene — check `[Downloading Data] / SubRoom_DownloadAndParse` in the same log block.

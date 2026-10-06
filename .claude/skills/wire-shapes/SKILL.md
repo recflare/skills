@@ -57,7 +57,7 @@ then `solve_header.py` → `idtables{,2,3}.py` → `rebuild_metadata.py` → `re
 
 ## Already derived
 
-**[`references/CATALOG.md`](references/CATALOG.md)** — 86 routes, one file each, indexed by service
+**[`references/CATALOG.md`](references/CATALOG.md)** — 111 routes, one file each, indexed by service
 and path. Grep it before deriving anything. (`PROMPTS.md` at the repo root has ready-made openers for
 looking one up, deriving a missing one, and checking a live capture against the client.)
 
@@ -195,6 +195,34 @@ and the type sequence against it is the real check, and it exposes members that 
   exists for them; the generated code reads a primitive and relies on the implicit conversion.
 - **`Nullable<T>` marks the optional fields** — the smallest, highest-yield list, because those are
   exactly the ones whose absence changes client behaviour.
+
+## When a route 200s but the client shows nothing
+
+No exception, no log, no failed request — just an empty list or a missing row. The body parsed fine,
+so none of the exception types above fire. **A value the client silently filters on is wrong.**
+
+Do not start with disassembly. Inlined getters have zero call sites and the filtering usually lives
+in continuation lambdas inside generic-shared LINQ, so `callxref` returns nothing and nearby
+field-offset reads mislead (a `[rax+0x78]` read in the inventions facade turned out to be on the
+current *room* object, not the DTO).
+
+**Diff a working route against the broken one instead.** Two routes often share a DTO while only one
+renders:
+
+1. Capture both payloads.
+2. Diff the key sets and values.
+3. **Discard every key that is absent from the working payload** — if the client renders without it,
+   it cannot be the gate. This is what does the real pruning.
+4. What remains is present in both with a different value. That is your candidate; it is usually a
+   single field, and a one-line server change tests it.
+
+Worked example: `inventions/v2/mine` returned a valid 28-key payload and rendered nothing while
+`/v2/search` was fine. Step 3 cleared `LatestVersionNumber`, `ForceCannotPublish` and
+`IsRecRoomApproved` (all absent from `/v2/search`), leaving **`UgcVersion` 0 vs 1** — confirmed as the
+cause. See [inventions-v2-mine](references/endpoints/inventions-v2-mine-wire-shape.md).
+
+⚠️ **An omitted key is indistinguishable from a wrong one here**, because a missing number
+deserializes to `0`. Enumerate the keys the formatter declares and send all of them.
 
 ## Diagnosing a stackless NRE from a response
 
