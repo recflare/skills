@@ -57,7 +57,7 @@ then `solve_header.py` → `idtables{,2,3}.py` → `rebuild_metadata.py` → `re
 
 ## Already derived
 
-**[`references/CATALOG.md`](references/CATALOG.md)** — 112 routes, one file each, indexed by service
+**[`references/CATALOG.md`](references/CATALOG.md)** — 115 routes, one file each, indexed by service
 and path. Grep it before deriving anything. (`PROMPTS.md` at the repo root has ready-made openers for
 looking one up, deriving a missing one, and checking a live capture against the client.)
 
@@ -70,6 +70,8 @@ looking one up, deriving a missing one, and checking a live capture against the 
 | [llcldppagij-envelope-failure-exception](references/conventions/llcldppagij-envelope-failure-exception.md) | LLCLDPPAGIJ is recflare-2025's generic 'RecNet envelope reported failure' exception — thrown only when an ENVELOPED response is null or Success==false, never by a bare-DTO endpoint. |
 | [number-token-parsing-exception](references/conventions/number-token-parsing-exception.md) | Utf8Json NKJABNHBPCA "expected:'Number Token', actual:'['" is NOT IONCMJIACFI — it means T is a bare `long?`. Exactly two routes in 20250718.01 are: GET dormroom/me (Rooms) and GET api/progressionEvents/active (API). |
 | [nonobject-response-routes](references/conventions/nonobject-response-routes.md) | The 145 routes whose response T is a List or scalar — i.e. every endpoint that hard-fails with `Malformed Response: '{}'`. Generated table at il2cpp-2025/nonobject-responses.txt, plus the scan that rebuilds it. |
+| [jwt-role-privilege-claims](references/conventions/jwt-role-privilege-claims.md) | The client reads TWO token claims: `role` (15 entries incl. developer, moderator, influencer, screenshare, junior, whiteglove1/2) and `rn.privilege` (the CamelCase Ban* list). Case-sensitive List<string>.Contains. Also: the "Volunteer Mod" nametag is role=moderator PLUS a player-side opt-in toggle, not any DTO field. |
+| [numeric-notification-enum](references/conventions/numeric-notification-enum.md) | Some websocket pushes dispatch by INTEGER type id from .EMNAKPGIHDN (39 members) and are therefore ABSENT from notifications-2025.txt, which is built from string literals - e.g. ConsumableMappingRemoved=71. How to find a numeric push's handler and payload, and why an ignored-response route can still have visible client effects. |
 | [recnet-service-enum](references/conventions/recnet-service-enum.md) | The full RecNet service enum NNPMGHNBFMD for build 20250718.01 — 31 unobfuscated member names with values (Auth 1, API 2, Lists 13, Rooms 16, Econ 28 …); the number every wire-shape note calls 'svc N'. |
 
 Two exception types are worth recognising on sight: `IONCMJIACFI` ("Malformed Response") means the
