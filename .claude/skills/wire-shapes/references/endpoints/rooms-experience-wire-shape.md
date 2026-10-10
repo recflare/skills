@@ -27,10 +27,13 @@ as **query params** (lowercase camelCase, via `MGPBDIAGCFD.ELHKHFJEHLM`) with no
 the valueless envelope `JFNAKFCGDAO` — see [outfits-me-put-wire-shape](outfits-me-put-wire-shape.md) for that 3-key shape.
 Same path, two verbs, two completely different response shapes.
 
-Sibling endpoints on the same template: `{0}/{1}/experience/coOwner`
-(`KMLGJHNBELM`, `0x7DB53C0`) and `{0}/{1}/experience/player` (`BPMPLEMPMHF` `0x7DB4D90`,
-`GBMHNIPLKGF` `0x7DB5150` — the latter takes `concurrencyCode` and `increment` query params, which
-is the XP-award call; cf. the "Room Experience Concurrency Code for Room {0} is not cached" log).
+Sibling endpoints on the same template are now derived — see
+[rooms-experience-player](rooms-experience-player-wire-shape.md): `{0}/{1}/experience/player` GET
+(`BPMPLEMPMHF` `0x7DB4D90`) returns a **different** bare DTO `.KBOCGEMKEOL`
+`{RoomExperienceEnabled, Experience, ConcurrencyCode}`, its POST (`GBMHNIPLKGF` `0x7DB5150`,
+form-body `increment` + `concurrencyCode`) is **enveloped** around that same DTO, and
+`{0}/{1}/experience/coOwner` POST (`KMLGJHNBELM` `0x7DB53C0`) is the absolute-value twin
+(`targetExperience`). **Do not reuse this note's `{Enabled, DailyLimit}` shape for `/player`.**
 
 **Why:** this is the room-level XP feature's config — `DailyLimit` caps per-day XP earned in the
 room. Returning `Enabled:false` disables room XP entirely for that room.

@@ -27,6 +27,19 @@ UnknownError=-1), `RoomInstance` (`GGCLDGNBNLI`|null), `CorrelationId` (Guid). F
 `RoomInstanceType` enum, `MatchmakingPolicy` enum. Two `[IgnoreDataMember]` backing fields sit at
 0x30 and 0x58 and are **not** on the wire — that is why 17 fields map to 15 keys.
 
+**`MatchmakingPolicy`** is the enum **`.FDLHIHKECMA`** (typedef #22249, `int`), three members:
+`Default 0`, `Avoid 1`, `Ignore 2` — `Avoid` deprioritises the instance, `Ignore` removes it from
+matchmaking entirely. It is the `<ICOOAHEGKMO>k__BackingField` of `GGCLDGNBNLI`, and the same enum is
+the `policy` param of **`PUT roominstance/{id}/matchpolicy`**
+([matchmaking-roominstance-matchpolicy](matchmaking-roominstance-matchpolicy-wire-shape.md)) and the SubRoom DTO's
+persisted default (`rooms/{0}/subrooms/{1}/default_matchmaking_policy`). There is **no typedef
+literally named `MatchmakingPolicy`** in this build — the name survives only as this wire key, so
+searching the metadata for it finds nothing.
+
+When the policy refuses a join, the matchmake routes report it as
+`JILFDCOLLLA.RoomInstanceBlockedByMatchmakingPolicy = 86` — full table in
+[matchmake-v2-player](matchmake-v2-player-wire-shape.md).
+
 Two real post-deserialize hooks here (unlike the curated-list DTO, which folds onto the
 `0xA60520` no-op):
 

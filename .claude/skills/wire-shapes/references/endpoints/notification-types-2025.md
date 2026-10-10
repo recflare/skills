@@ -27,6 +27,49 @@ real subscriber is `HGDMAPNBDOA` (see below).
 (Tested by presence of each id literal in the `20230414` string table. The reverse direction —
 ids *removed* since 2023 — was not computed, because `regall.py` is broken on that build.)
 
+## `PlayerProgressionLevelUpdate`
+
+Derived **2026-10-07**. Subscriber is **`LBKMGPMDOGK`** (the player-progression facade). Registration
+at `0x7D5CD56`/`0x7D5CD60` inside `LBKMGPMDOGK.OCOPJMCPGIB` `0x7D5CC20`:
+`KOOMBBKFAEP<inst 1144 = .DPBJAGGKHDJ>('PlayerProgressionLevelUpdate', HIAHOADEAFB)`, and the handler
+signature `static void HIAHOADEAFB(.DPBJAGGKHDJ)` confirms the payload independently.
+
+**Payload = `.DPBJAGGKHDJ`** (typedef #45685), formatter **`LFHEPCILADM` `.ctor 0x7D7F160`** (+0x470),
+`____stringByteKeys` run `0x7D7F477`..`0x7D7F519` — **3 keys, all `int`**, 1:1 with the 3 declared
+fields in offset order:
+
+| # | key | CLR | off |
+|---|---|---|---|
+| 1 | `PlayerId` | int | 0x10 |
+| 2 | `Level` | int | 0x14 |
+| 3 | `XP` | int | 0x18 |
+
+Wrapped in the standard `MDCEJFPDCEL<T>` frame — **`Msg` then `Id`, `Id` a string**
+([avatar-gifts-v2](avatar-gifts-v2-wire-shape.md)):
+
+```json
+{ "Msg": { "PlayerId": 205, "Level": 42, "XP": 125000 }, "Id": "…" }
+```
+
+All three are plain non-nullable `int` — there is no `null` to send, and `DPBJAGGKHDJ.CPOBHIECLEN` is
+the shared no-op `0xA60520`, so a missing key lands as `0`. **A push that omits `Level` reads as
+level 0**, which is a visible regression rather than an error.
+
+`XP` is an **absolute total**, not a delta — the three HTTP reads on the same facade return the same
+DTO, so the push and the fetch have to agree:
+
+| facade method | meaning |
+|---|---|
+| `LBKMGPMDOGK.OOKDPMCFBMO() -> .DPBJAGGKHDJ` | the cached local value the UI reads |
+| `LBKMGPMDOGK.GNHIAGJMPLA() -> KPIPLFECKNC<.DPBJAGGKHDJ>` | fetch own progression |
+| `LBKMGPMDOGK.HNBDPFINOJD(List<int>) -> KPIPLFECKNC<List<.DPBJAGGKHDJ>>` | bulk fetch by account ids |
+
+Consumers are unobfuscated and say what breaks if the push is wrong:
+`AGUI.StackedUI.PlayerLevelText` (`BCFHGPNNPCF`, `NALOEJHPOOO`),
+`AGUI.StackedUI.ProgressionController.CPGCGMNGIBM`, `PlayerInfoUIControl.BECGHKONOPB`. So this is the
+level number above a player's name and on their card — send it for **other** players too, not only
+the local one, which is what `PlayerId` is for.
+
 ## `ReputationUpdate`
 
 Subscriber is **`HGDMAPNBDOA`** (the reputation manager: `OBNIKGABDBN()` get-local,

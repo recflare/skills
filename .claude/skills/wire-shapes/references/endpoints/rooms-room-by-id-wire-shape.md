@@ -117,11 +117,67 @@ then the base Room:
 remaining keys come from its bases. **Per-key CLR types are not pinned** — only the key names and
 order were derived.
 
-⚠️ **Formatter identification caveat.** `0x773F5A0` was picked by intersecting the `SubRooms` and
-`RoomId` key xrefs, which left **two** candidates (`0x773F5A0` and `0x7747270`); the second was not
-ruled out, and its run carries `DataBlob` but no `DataBlobHash`. The identification rests on
-`DataBlob` and `SubRooms` appearing in the same run plus the live payload matching this key set — not
-on a TypeInfo link, which the resolver-index indirection does not provide here.
+✅ **Formatter identification CONFIRMED 2026-10-06.** `0x773F5A0` was originally picked by
+intersecting the `SubRooms` and `RoomId` key xrefs, which left two candidates (`0x773F5A0` and
+`0x7747270`) and no way to choose. **`py msig.py <FormatterClass>` settles it directly** — a
+generated Utf8Json formatter's `Serialize`/`Deserialize` pair names the concrete DTO in its
+signature:
+
+```
+py msig.py KHGGMDBONNN   ->  void FBGBLPHHDGN(.BDLOEIPNGEL, .HGMJJMJDHLJ, .COIBJKJDIKH)
+                             .HGMJJMJDHLJ LABNBGADOBH(.ANAMOLLPKLG, .COIBJKJDIKH)
+py msig.py KNMBKOFNJCK   ->  ... .AOCOBMKGJMD ...
+```
+
+So `KHGGMDBONNN` `.ctor 0x773F5A0` is the formatter for `.HGMJJMJDHLJ` (= inst #1188) and the other
+candidate `KNMBKOFNJCK` `.ctor 0x7747270` belongs to **`.AOCOBMKGJMD`**, a different Room-shaped DTO
+that additionally carries a `Permissions` key.
+
+**Generalisable — prefer this over key-literal intersection.** The resolver-index indirection
+(`PGHNJGDNFGC..cctor` mapping type → integer) blocks `typeslots.py`→`mxref.py` in the formatter →
+type direction, but the formatter class's own metadata signature carries `T` unobfuscated-as-to-shape.
+Once you have a candidate formatter class name, `msig.py` on it is a one-call confirmation.
+
+## `SubRooms[]` — the element shape (`.PNAGCNAKDLL`), 12 keys
+
+Derived **2026-10-07**. Formatter **`MJDIFJOAEJM` `.ctor 0x7731450`** (+0xFE0),
+`____stringByteKeys` run `0x7731FA4`..`0x77322E9`:
+
+| # | key | CLR | off |
+|---|---|---|---|
+| 1 | `SubRoomId` | long | 0x10 |
+| 2 | `RoomId` | long | 0x18 |
+| 3 | `UnitySceneId` | enum `.CFCLEMKANPO` | 0x28 |
+| 4 | `Name` | string | 0x38 |
+| 5 | **`CurrentSave`** | **`.GCLKKDPHAON`** (the 15-key save record) | 0x40 |
+| 6 | `LastModeratedSaveModerationState` | `.CCJNDAADAJO` byte | 0x48 |
+| 7 | `IsSandbox` | bool | 0x49 |
+| 8 | `MaxPlayers` | int | 0x4c |
+| 9 | `Accessibility` | enum `.KHLCBNKACFL` | 0x50 |
+| 10 | `DefaultMatchmakingPolicy` | enum `.FDLHIHKECMA` | 0x54 |
+| 11 | `ShouldAutoStageSaves` | bool | 0x58 |
+| 12 | `StagedSubRoomDataSaveId` | `long?` | 0x60 |
+
+`UnitySceneId` is the scene-location enum — GUID table in `SCENES.md`. `DefaultMatchmakingPolicy`
+is the same 3-member enum the live override uses
+([matchmaking-roominstance-matchpolicy](matchmaking-roominstance-matchpolicy-wire-shape.md)).
+
+The type declares **14** backing fields; the two strings at `0x20` and `0x30` have **no wire key**
+(`[IgnoreDataMember]`), which is why 14 fields give 12 keys.
+
+### ⚠️ `SubRooms[].CurrentSave` is the ONLY wire path for the room-load `OMVersion` gate
+
+**No route returns a bare `.PNAGCNAKDLL`** — a scan of every generic instantiation finds it as no
+send's `T`. It reaches the client **only nested here**, inside this route's `SubRooms` array. And
+`RecNet.Matchmaking.FINBJKEJMJL()` hands exactly this object to the room-load check, which reads
+`CurrentSave.OMVersion` ([rooms-subrooms-data](rooms-subrooms-data-wire-shape.md)).
+
+So the `OMVersion` that can refuse a room load is **`SubRooms[].CurrentSave.OMVersion` in this
+response** — *not* the `OMVersion` on `GET .../saves/{saveId}`
+([subroom-save-by-id](subroom-save-by-id-wire-shape.md)) and *not* the one on
+`saves/no_unity_assets`. Those two carry the same key name on the same DTO, so fixing it there looks
+right and changes nothing. Diagnosed on a live server 2026-10-07, where `saves/{saveId}` was
+returning `OMVersion: 138` and the room still refused to load.
 
 ## The `include` mask
 

@@ -25,6 +25,7 @@ Derive the shape from the formatters, then compare. When you derive something ne
 | --- | --- | --- |
 | pre-2025 builds | works | Tier B scripts, `out/{dump.cs,script.json,stringliteral.json}` |
 | **`recflare-2025` (`20250718.01`)** | **impossible** | carve pipeline + Tier A scripts |
+| **RecFlare Studio** (the Unity *tool*, not the game) | n/a | **managed .NET** — no IL2CPP work at all. `ReflectionOnlyLoadFrom` the DLLs under `Library/PackageCache/com.recroom.*` / `Library/ScriptAssemblies`. DTO names survive obfuscation; read the deserialize target off the async state machine's `<>u__N` awaiter field. See [studio-cloud-builds](references/endpoints/studio-cloud-builds-wire-shapes.md). |
 
 Il2CppDumper cannot process the 2025 build: the shipped `global-metadata.dat` is a 47,962,260-byte
 decoy of repeated `0x52`, `.text`/`il2cpp` are encrypted at rest, `Il2CppCodeRegistration` is
@@ -57,7 +58,7 @@ then `solve_header.py` → `idtables{,2,3}.py` → `rebuild_metadata.py` → `re
 
 ## Already derived
 
-**[`references/CATALOG.md`](references/CATALOG.md)** — 115 routes, one file each, indexed by service
+**[`references/CATALOG.md`](references/CATALOG.md)** — 126 routes, one file each, indexed by service
 and path. Grep it before deriving anything. (`PROMPTS.md` at the repo root has ready-made openers for
 looking one up, deriving a missing one, and checking a live capture against the client.)
 
@@ -70,7 +71,7 @@ looking one up, deriving a missing one, and checking a live capture against the 
 | [llcldppagij-envelope-failure-exception](references/conventions/llcldppagij-envelope-failure-exception.md) | LLCLDPPAGIJ is recflare-2025's generic 'RecNet envelope reported failure' exception — thrown only when an ENVELOPED response is null or Success==false, never by a bare-DTO endpoint. |
 | [number-token-parsing-exception](references/conventions/number-token-parsing-exception.md) | Utf8Json NKJABNHBPCA "expected:'Number Token', actual:'['" is NOT IONCMJIACFI — it means T is a bare `long?`. Exactly two routes in 20250718.01 are: GET dormroom/me (Rooms) and GET api/progressionEvents/active (API). |
 | [nonobject-response-routes](references/conventions/nonobject-response-routes.md) | The 145 routes whose response T is a List or scalar — i.e. every endpoint that hard-fails with `Malformed Response: '{}'`. Generated table at il2cpp-2025/nonobject-responses.txt, plus the scan that rebuilds it. |
-| [jwt-role-privilege-claims](references/conventions/jwt-role-privilege-claims.md) | The client reads TWO token claims: `role` (15 entries incl. developer, moderator, influencer, screenshare, junior, whiteglove1/2) and `rn.privilege` (the CamelCase Ban* list). Case-sensitive List<string>.Contains. Also: the "Volunteer Mod" nametag is role=moderator PLUS a player-side opt-in toggle, not any DTO field. |
+| [jwt-role-privilege-claims](references/conventions/jwt-role-privilege-claims.md) | The client reads TWO token claims: `role` (15 entries incl. developer, moderator, influencer, screenshare, junior, whiteglove1/2) and `rn.privilege` (the CamelCase Ban* list). Each must be a JSON ARRAY of strings (or one bare string) - there is NO delimiter parsing, so "a b" or "a,b" silently grants nothing; matching is case-sensitive. Also: the "Volunteer Mod" nametag is role=moderator PLUS a player-side opt-in toggle, not any DTO field. |
 | [numeric-notification-enum](references/conventions/numeric-notification-enum.md) | Some websocket pushes dispatch by INTEGER type id from .EMNAKPGIHDN (39 members) and are therefore ABSENT from notifications-2025.txt, which is built from string literals - e.g. ConsumableMappingRemoved=71. How to find a numeric push's handler and payload, and why an ignored-response route can still have visible client effects. |
 | [recnet-service-enum](references/conventions/recnet-service-enum.md) | The full RecNet service enum NNPMGHNBFMD for build 20250718.01 — 31 unobfuscated member names with values (Auth 1, API 2, Lists 13, Rooms 16, Econ 28 …); the number every wire-shape note calls 'svc N'. |
 
@@ -106,6 +107,12 @@ was null or `Success == false`, so a bare-DTO endpoint can never raise it.
    API classes also expose a class-bound `LMKONLJOAEP<T>` wrapper that does the same thing.
    *(Pre-2025 names for the same roles: `BGBHKBJEMPI.OGJBBIDJGFI` / `DDKPNIIFDNB` / `ONDBGFGJBDE` /
    `MEKOIMDCOFB`.)*
+   **Confirm a candidate formatter with `py msig.py <FormatterClass>`.** A generated Utf8Json
+   formatter's `Serialize`/`Deserialize` signature names the concrete DTO, so one call settles which
+   of several key-literal-intersection candidates is right. This is the way around the resolver-index
+   indirection (`PGHNJGDNFGC..cctor` maps type -> integer, which breaks `typeslots.py`->`mxref.py`);
+   prefer it over intersection whenever you have a class name.
+
 5. **Dump the shape.** Find the DTO's Utf8Json formatter — `grep -n "IHCMHKGLBEA<TDto>" *.cs` in the
    Cpp2IL dump — and run `py names.py <formatter_ctor_rva> 900`. Cross-check with
    `py fields2025.py <TypeName>`. See *Reading formatter output* below.

@@ -51,3 +51,32 @@ it never touches `ELHKHFJEHLM`.
 
 **How to apply:** when reading a route, check the verb first. `ELHKHFJEHLM` on a GET = query;
 on anything else = form body. A server binding these should accept `[FromForm]` for non-GET routes.
+
+## A bare trailing `?` is normal and carries nothing
+
+Added **2026-10-07**, after a capture of `GET rooms/112/experience/player?` — a route with **zero**
+`ELHKHFJEHLM` calls — raised "is there a query param I'm missing?".
+
+The query string is assembled by **`MGPBDIAGCFD.ADJPJGNMMLM() -> string`** `0x7D9A9B0` (+0x1A0):
+
+```
+joined = String.Join("&", params)                 # 0x7D9AAEE, the '&' literal in rsi
+if (path.Contains('?'))                           # 0x7D9AAFF: mov edx, 0x3F ; String.Contains
+    return String.Concat(path, "&", joined)       # 0x7D9AB1A
+else
+    return String.Concat(path, "?", joined)       # 0x7D9AB40
+```
+
+Two things follow:
+
+- **The concat is unconditional** — there is no "params is empty" guard in this method. With an empty
+  collection, `String.Join` returns `""` and the result is literally `path + "?"`. So a trailing `?`
+  with nothing after it means **the param list was empty**, not that a parameter was dropped.
+- **The separator is chosen by `path.Contains('?')`, not by position.** A path that already carries a
+  `?` from its own `String.Format` template gets `&` for the first real param. That is why
+  [itemwishlists-v1-routes](../endpoints/itemwishlists-v1-routes-wire-shapes.md) can produce `...?True` from a format string and
+  still append params correctly — the two mechanisms compose.
+
+**How to apply:** server-side, treat a trailing `?` as an empty query string and do not 400 on it.
+When auditing a capture, a bare `?` is not evidence of a parameter — count the `ELHKHFJEHLM` calls in
+the entry method instead.

@@ -3,19 +3,73 @@
 > The client reads **two** claim names out of the auth token: **`role`** holds the feature/role list
 > (`developer`, `moderator`, `influencer`, `screenshare`, `junior`, `whiteglove1/2`, …) and
 > **`rn.privilege`** holds the ban list (`BanVChat`, `BanRmChat`, `BanPubInv`, `BanRumiAI`). Both are
-> **lists of lowercase/CamelCase strings** tested with `List<string>.Contains`.
+> each a **JSON array of strings** (or a single JSON string) — **never** a space- or comma-separated
+> list; there is no delimiter parsing in the client at all.
 > The **"Volunteer Mod"** nametag is the `moderator` entry of `role` — but it is **opt-in**: the
 > player still has to switch it on in their own settings. Nothing on any account DTO controls it.
 
 Derived **2026-10-06** from build `20250718.01`, answering "how does a player get the Volunteer Mod
 tag".
 
+## Claim value format — a JSON string OR a JSON array, never a delimited string
+
+⚠️ **There is no delimiter parsing anywhere.** A disassembly sweep of the parser
+(`APADKOMMKKJ`, 0xBB0 bytes) and both lookups (0x100 bytes each) finds **no `String.Split`, no
+`IndexOf`, no `Substring`, no `ToCharArray`, and no `','` / `' '` / `';'` literal**. Spaces and
+commas are not separators — they are ordinary characters inside the value.
+
+| `role` value | works? |
+|---|---|
+| `["moderator","developer"]` | ✅ the correct form for more than one |
+| `"moderator"` | ✅ but **one entry only** |
+| `"moderator developer"` | ❌ compared as the single literal `moderator developer` — matches nothing |
+| `"moderator,developer"` | ❌ same |
+| `"moderator, developer"` | ❌ same |
+| `"Moderator"` | ❌ case-sensitive |
+
+So a space-or-comma separated list — the OAuth2 `scope` convention, and what SAML-style `role`
+claims often carry — **silently grants nothing**. There is no log line and no error; every privilege
+simply reads `false`.
+
 ## The parser
 
 **`PCGJFHLIGAC.APADKOMMKKJ(string, string, string)`** `0x7D17360` (+0xBB0) is the token-claims
-parser. Every lookup goes through **`PCGJFHLIGAC.DIFENANFJCD(string name)`** `0x7D18F10` (+0x100),
-which is a plain `List<string>.Contains` (methodref at `0x7D18F2E`) with `String.op_Equality` —
-**exact, case-sensitive string match, no prefix or wildcard handling.**
+parser:
+
+1. **`MPDMKDOGMGF.ODODJBJCCEK(string jwt)`** `0x7DBACB0` decodes the token to a
+   `Dictionary<string, object>` (call at `0x7D17670`).
+2. `Dictionary<string, object>.TryGetValue` pulls out `'role'` (`0x7D17695`) and later
+   `'rn.privilege'` (`0x7D1790F`) — the generic inst is `<string, object>`, so **each claim value
+   arrives as a bare `object`** straight off the JSON deserializer.
+3. Both land in **`.DCAOPKGOIJH`** (typedef #22187), whose two field names the obfuscator missed:
+
+   ```
+   object roleElem        // the 'role' claim value
+   object privilegeElem   // the 'rn.privilege' claim value
+   ```
+
+4. Each entry is then tested by one of two lookups, passed `ref` to that struct:
+
+| lookup | reads | used for |
+|---|---|---|
+| **`PCGJFHLIGAC.DIFENANFJCD(string, ref DCAOPKGOIJH)`** `0x7D18F10` | `roleElem` | the 15 `role` entries |
+| **`PCGJFHLIGAC.ICEOPOMBKLA(string, ref DCAOPKGOIJH)`** `0x7D1B990` | `privilegeElem` | the 4 `rn.privilege` entries |
+
+Both are structurally identical (+0x100 each) and do exactly two things with the `object`:
+
+```
+if (value == null) return false;
+if (value is string s)        return String.op_Equality(s, name);   // 0x7D18F7E / 0x7D1B9FF
+if (value is List<object> l)  return l.Contains(name);              // tail-jmp, 0x7D18FF7
+return false;
+```
+
+The string branch is an **exact class compare** (`cmp qword ptr [rdx], rax` + `cmove` against a
+cached `System.String` TypeInfo — valid because `String` is sealed), then `String.op_Equality`:
+**case-sensitive, no trimming, no prefix or wildcard handling.** The list branch is
+`List<object>.Contains` (methodref generic inst `#6` = `object`), which compares through
+`EqualityComparer<object>.Default` — so a JSON array of strings works, and non-string elements in
+the array simply never match.
 
 The literal order in the method body shows the two claims and what each one gates:
 
@@ -26,10 +80,6 @@ The literal order in the method body shows the two claims and what each one gate
 
 Note the casing split: the `role` entries are all lowercase, the `rn.privilege` ban entries are
 **CamelCase with a `Ban` prefix**. `DIFENANFJCD` is case-sensitive, so `banvchat` does nothing.
-
-Two more literals are present in the method's init block but have no `mov` use in the run —
-`'BanRumiAI'` appears in both lists above because it is queried under `rn.privilege`; nothing else is
-left over.
 
 `SessionManager.get_IsDeveloper` `0x2179210` and `get_IsWhiteGloveCreator` are the surfaced forms of
 two of these. There is **no** `SessionManager.get_IsModerator` — the moderator flag is read straight

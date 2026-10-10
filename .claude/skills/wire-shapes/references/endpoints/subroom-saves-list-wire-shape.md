@@ -37,8 +37,14 @@ No required-field throw: `GCLKKDPHAON.CPOBHIECLEN` is the `0xA60520` no-op and
 false on a null list.
 
 **Why:** `no_unity_assets` refers to the *element type*, not to omitted fields — there is a subclass
-`OOIBOPOFICP : GCLKKDPHAON` adding two unity-asset lists that a different endpoint returns. This one
+`OOIBOPOFICP : GCLKKDPHAON` that a different endpoint returns. This one
 returns the plain base, so emitting those extra keys is pointless (Utf8Json drops unknown keys).
+
+**That endpoint is now derived: `GET .../saves/{saveId}`** — see
+[subroom-save-by-id](subroom-save-by-id-wire-shape.md). Correction to the line above: `OOIBOPOFICP` adds **four**
+keys, not two — `UnitySubAssets`, `ReferencedUnityAssets`, `UnityAsset`, `UnityAssetHash` — and
+because Utf8Json emits derived members first, they lead the run, so that route's shape is a 19-key
+object whose **first four** keys are the new ones, not a 15-key object with four appended.
 
 **How to apply:** `FGLBCGIODIE<T>` is the generic paged base — any endpoint returning it has the same
 `{Results, TotalResults}` outer shape, so only the element formatter needs re-deriving.

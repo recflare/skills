@@ -193,10 +193,149 @@ Full key list in [rooms-room-by-id](rooms-room-by-id-wire-shape.md). Two traps f
 A `204` or an empty body fails the same way — `PJPLCMBOAFB` is a response-required helper, not the
 fire-and-forget `CNDMDLNHDLI` tier.
 
+## ⚠️ The UI toggle does NOT read this response — why a slider snaps back
+
+Symptom: a bool toggle in the room-roles UI (e.g. **"Can Self-Revive?"** = `CAN_SELF_REVIVE 9`)
+flips, the PUT succeeds, and the toggle reverts a moment later. **Fixing this response will not fix
+that**, because the client throws the response away.
+
+### The write discards `Value`
+
+The interface method behind the UI is
+
+```
+.BOIBFMBGBGB.FOHKKKNNPAA(long roomId, long subRoomId, IReadOnlyList<.OAANAMJCIDA>) -> Task
+```
+
+a **non-generic `Task`** (`IHMMMAEAMKC.FOHKKKNNPAA` `0xF23DE0`, +0x90). The envelope is still
+deserialized — so a wrong envelope faults the task — but the 63-key Room in `Value` is **parsed and
+dropped**. No UI state is taken from it.
+
+### The read-back is the MATCHMAKING room-instance payload
+
+The same interface exposes the authoritative read:
+
+```
+.BOIBFMBGBGB.NPPNKOILMFK(CancellationToken) -> Task<.FEJPDKONECB>
+.BOIBFMBGBGB.GJOBGOHMBDB(Action<.FEJPDKONECB>)   // add change listener
+.BOIBFMBGBGB.AMIOOAOCIBJ(Action<.FEJPDKONECB>)   // remove
+```
+
+`IHMMMAEAMKC.NPPNKOILMFK` `0xF24030` guards on the current game session
+(`RecNet.Matchmaking.HOGBJEEMMIP` → `GGCLDGNBNLI.LNKIECNGMJP()`, a `bool`) and delegates to
+`KCHDMOJGHJD.NPPNKOILMFK` `0x7DDADD0`, whose `AsyncTaskMethodBuilder<T>` is inst **#1170 =
+`.FEJPDKONECB`**.
+
+**`.FEJPDKONECB` is the room-instance join payload.** Formatter **`DJFNPPHJPJA` `.ctor 0x77386F0`**
+(+0x470) — confirmed by `py msig.py DJFNPPHJPJA`, whose `Serialize`/`Deserialize` name
+`.FEJPDKONECB` outright — with a 3-key `____stringByteKeys` run at `0x7738A07`..`0x7738AA9`:
+
+| # | key | CLR | field |
+|---|---|---|---|
+| 1 | `RoomInstanceId` | long | `AMKPFKOBAPI` |
+| 2 | `PhotonAccessToken` | string | `ICPHPNCEGMD` |
+| 3 | **`Permissions`** | `IReadOnlyList<.OAANAMJCIDA>` | `JNNNFICAFPB` |
+
+```json
+{ "RoomInstanceId": 123456, "PhotonAccessToken": "…",
+  "Permissions": [ { "Permission": "CAN_SELF_REVIVE", "Role": 25,
+                     "Override": true, "Type": 0, "Value": "true" }, … ] }
+```
+
+(`.FEJPDKONECB` declares a 4th field, a self-typed `EOKOBKKHEHK` clone slot, which is not a wire
+key — the same pattern as `GGCLDGNBNLI.NIHEOMPJLFD`.)
+
+`RoomInstanceId` + `PhotonAccessToken` next to `Permissions` identifies this as the **matchmaking
+join / room-instance** response, **not** anything on the Rooms service. So:
+
+> **The permission values the UI displays come from the matchmaking room-instance payload's
+> `Permissions` array.** The Rooms PUT writes; matchmaking reads back. A server that persists the PUT
+> but keeps serving the old `Permissions` in that payload produces exactly this snap-back.
+
+### Why it looks like an optimistic-UI revert
+
+`RRUI.Data.RoomPermissionModel` holds
+
+```
+Dictionary<.OGKGADHHDKM, object> MCKOCLIDLPO     // in-flight writes, keyed by permission
+bool IsFieldRequestInProgress(.OGKGADHHDKM)      // 0xAD87F0 - ContainsKey on that dict
+void BMLPAEEDGDK(.FEJPDKONECB)                   // 0xAD84C0 - the change-listener callback
+```
+
+Each UI row is one `.OGKGADHHDKM` member (`RRUI.Data.RolePermissionModel.get_RolePermission()`
+returns `.OGKGADHHDKM`; `GetRolePermissionFriendlyName` `0x2849F90` renders the label). While the
+write is in flight the row shows the **pending** value from `MCKOCLIDLPO`; once that entry clears,
+the row falls back to whatever `BMLPAEEDGDK` last applied from `.FEJPDKONECB`. Two different faults
+look identical:
+
+1. **The PUT's task faulted** — wrong envelope → `LLCLDPPAGIJ` → the pending entry clears and the
+   old value reappears. Cheapest to rule out: make the envelope exactly
+   `{Value:{…}, Success:true, Error:null, error_id:null}` and confirm a `204`/bare body isn't being
+   sent.
+2. **The read-back still has the old value** — the matchmaking `Permissions` array was not updated.
+
+### How to tell the two apart
+
+- **Watch for an HTTP request after the PUT.** If a matchmaking fetch follows, that is the response
+  to fix — its `Permissions` must contain the entry with the new `Value`. If **nothing** follows,
+  the client is reading a cached session and the payload has to be right at join time (or refreshed
+  by a push).
+- Match on **`Permission` name *and* `Role`** — one `(Permission, Role)` pair per row, so echoing
+  `CAN_SELF_REVIVE` under the wrong `Role` leaves the edited row unchanged.
+- `CAN_SELF_REVIVE` is `Type: 0` (`Bool`) with `Value` a **string** (`"true"` / `"false"`), not a
+  JSON boolean — `Value` is `string` on the DTO regardless of `Type`.
+- The simplest correct server behaviour is to **echo the request's `permissions` array back** as the
+  authoritative set in the matchmaking payload.
+
+### ✅ CONFIRMED root cause: the read-back must carry the SAME `(Permission, Role)` pair
+
+Diagnosed on a live server **2026-10-06**. The PUT body was one entry:
+
+```json
+[ { "Permission": "CAN_SELF_REVIVE", "Role": 10, "Override": true, "Type": 0, "Value": "True" } ]
+```
+
+and `/photon_access_token` came back with 14 entries covering **only `Role: 0` and `Role: 255`** —
+no `Role: 10`. The Host row therefore had nothing to read, fell back to the default, and the toggle
+reverted. The PUT itself was fine.
+
+**`(Permission, Role)` is the lookup key, not `Permission` alone.** The applier is
+
+```
+static bool .DFBNLBFNPDP.LADMPAMHNKG(.PHBPGMMKBJJ role, .OGKGADHHDKM permission,
+                                     .OAANAMJCIDA dto, .ACIOJEPKBOA)
+```
+
+— role and permission are separate arguments — and the read side is
+`.DFBNLBFNPDP.CNLKIHKBDNB(.IALDHONKEJC subRoom, .OGKGADHHDKM permission)` `0x8A74040` with an
+`(int, .OGKGADHHDKM)` overload at `0x8A740F0`. So an entry under the wrong `Role` is invisible to the
+row being edited, and **`Role: 0` (`None`) is not a wildcard or a default-for-all** — it is just the
+`None` tier.
+
+Practical rule: the `Permissions` array must contain **one entry per `(Permission, Role)` pair the UI
+can show** — every role tier in `.PHBPGMMKBJJ` the room actually uses, not only `None` and
+`Creator`. A server that serves a hard-coded default set will revert every edit for every tier
+missing from that set, while looking like a response-shape problem.
+
+✅ **`Value: "True"` is correct — capital T.** The client's own PUT body uses `"True"`, i.e. .NET
+`Boolean.ToString()`, so echoing that exact casing back is right. (This also closes the open
+question in [jwt-role-privilege-claims](../conventions/jwt-role-privilege-claims.md)-style string handling — here the
+client is the producer, so its own request is the authority on format.) `Type: 0` (`Bool`) with
+`Override: true` is likewise what the client sends and what it expects back.
+
+### Sibling: the ROOM-level permissions write
+
+`.BOIBFMBGBGB.BAKBFPICHDM(long roomId, IReadOnlyList<.OAANAMJCIDA>) -> Task` is the room-scoped
+twin, served by **`PUT rooms/{roomId}/permissions`** — `OALMDGJKBJH.BAKBFPICHDM` `0x7DF5610`
+(+0x1C0), description literal **`'change room permissions'`** at `0x7DF578B`, so also **enveloped**.
+The 1000+ block of `.OGKGADHHDKM` is what it carries. Its response is discarded the same way.
+
 ## Related
 
-The `Roles` key (#4) of the Room DTO is the read-back side of this write. Its element shape was not
-derived; the in-client role object is `.JNGHOMKNFPP`
+The Room DTO's `Roles` key (#4) is **not** the read-back for this write — see the section above. Its
+element is **`.FPMBNJIPBBL`** (typedef #23096, 4 fields:
+`ObscuredInt accountId`, `.PHBPGMMKBJJ role`, `int?`, `.PHBPGMMKBJJ role`), i.e. a **per-account role
+assignment**, carrying no permission values at all. The in-client role object is `.JNGHOMKNFPP`
 (`{PHBPGMMKBJJ roleType, Action<OGKGADHHDKM>, string name, bool}`), held in
 `.DFBNLBFNPDP` as `Dictionary<PHBPGMMKBJJ, JNGHOMKNFPP>` plus an `OGKGADHHDKM[]`. Sibling write
 routes on the same facade and literal family: `rooms/{0}/subrooms/{1}/modify`,
