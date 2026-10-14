@@ -374,3 +374,140 @@ The creator-side room-consumable CRUD lives on a **different facade** `.PLDJEBOE
 response types** (`HPBKMCLEANE<.JMHPDGFLBDG>` etc). Its `'Unable to update consumable'` literal
 (`0xD162E60`) is easy to mistake for the player-inventory path. See
 [roomconsumables-by-room](roomconsumables-by-room-wire-shape.md). Nothing on that facade affects a potion's duration.
+
+---
+
+# `GET api/consumables/v1/all?supportedVersion=2` (2026 build only)
+
+> Returns a **BARE ARRAY of the 8-key `RecNet.Consumable`** — the built-in consumable *catalogue*,
+> not a player's inventory.
+> ⚠️ **`ConfigurationData` is a JSON *string*, not an object.**
+> ⚠️ **`ConsumableItemDesc` must be unique and non-null across the array** — the client re-keys the
+> array into a `Dictionary<string, …>` by that field, and `Dictionary.Add` throws on a duplicate.
+> ⚠️ **2026 build `20260323.14` only** — `api/consumables/v1/all` is absent from `20250718.01`
+> (which has only `/consume`, `/transfer`, `/updateActive`). 2026 also adds
+> `api/consumables/v1/query/bulk` and `api/consumables/v1/ugc/create`.
+
+Derived **2026-10-13** from build `20260323.14`. Route literal `0xFC44C20`, state machine
+**`<GetAllBuiltInConsumablesAsync>d__36$$MoveNext`** `0x948EBC0`.
+
+Service **28 Econ** (`mov r8d, 0x1c` at `0x948ED96`), verb **GET** (`[HttpMethod statics + 0x08]` at
+`0x948ED77`).
+
+**`supportedVersion` is a hardcoded `2`** — `mov dword ptr [rsp + 0xE8], 2` at `0x948EDA7`, boxed at
+`0x948EDBA` and passed to `RGBOOBRDHEB.NJPEKLKCVCG("supportedVersion", (object)2)` at `0x948EDDF`.
+It is a **query string** parameter because the verb is GET
+([elhkhfjehlm-verb-dependent-params](../conventions/elhkhfjehlm-verb-dependent-params.md)); the client never sends any other value,
+so a server may ignore it or reject anything but `2`.
+
+## Response — bare array
+
+Send is `RGBOOBRDHEB::ZWUODKCINOA<T>` with generic inst **#23347 = `List<RecNet.Consumable>`**, so
+`{}` or an empty body hard-fails. Serve `[]` for "no consumables".
+
+Formatter `Utf8Json.Formatters.RecNet.FQGMEDSVAAD` `.ctor` **`0x9125BB0`** (+0x660).
+`RecNet.Consumable` declares **10** fields but the formatter emits only **8** keys:
+
+| # | key | CLR | notes |
+|---|---|---|---|
+| 1 | `ConsumableItemDesc` | string | **the dictionary key — unique, non-null** |
+| 2 | `InitialCount` | int | |
+| 3 | `CreatedAt` | `DateTime` | **not nullable** |
+| 4 | `ThumbnailImageName` | string | |
+| 5 | `FriendlyName` | string | |
+| 6 | `RoomieCategory` | int | |
+| 7 | `ConsumableToolName` | string | |
+| 8 | **`ConfigurationData`** | **string** | raw JSON text — see below |
+
+**No key:** the `IsRROConsumable` (bool) field and the `ConsumableConfigurationData` (object) field.
+Both are set client-side; neither is readable or writable from the wire.
+
+```json
+[ { "ConsumableItemDesc": "fireworks_basic",
+    "InitialCount": 10,
+    "CreatedAt": "2026-01-01T00:00:00Z",
+    "ThumbnailImageName": null,
+    "FriendlyName": "Fireworks",
+    "RoomieCategory": 0,
+    "ConsumableToolName": null,
+    "ConfigurationData": "{\"MeshConfigurationData\":null,\"EffectKeys\":[],\"TLAConfigurationData\":null,\"UnityAssetData\":null,\"PreviousUnityAssets\":[]}" } ]
+```
+
+### `ConfigurationData` is text, and this is provable
+
+The deserializer `FQGMEDSVAAD$$Deserialize` `0x91252B0` requests exactly **one** formatter from the
+resolver — generic inst **#746 = `System.DateTime`** (for `CreatedAt`). It never asks for
+`ConsumableConfigurationData`'s formatter, so key #8 cannot be an object; it is read as a plain
+string and pairs with the string field at declaration position 8.
+
+The *shape inside* that string is `RecNet.ConsumableConfigurationData`, 5 members:
+`MeshConfigurationData`, `EffectKeys` (`List<AvatarEffectKeyDTO>`), `TLAConfigurationData`,
+`UnityAssetData` (`UnityAssetConfigurationData`), `PreviousUnityAssets`
+(`List<UnityAssetConfigurationData>`).
+
+Same string-carrying-JSON pattern as `TimeLimitedEventDTO.ConfigJson`
+([timelimitedevents-by-id](timelimitedevents-by-id-wire-shape.md)).
+
+### ⚠️ `ConsumableItemDesc` becomes a dictionary key
+
+After the await, the state machine iterates the list and builds a
+**`Dictionary<string, RecNet.MGTBPZYXKTT>`** (generic inst #6232):
+
+```
+foreach (var c in list) {
+    RecNet.Consumables.TXSHETAYZEJ(c, out var converted, 0);   // 0x948EF0B
+    dict.Add(c.<field +0x10>, converted);                      // 0x948EF35, Dictionary.Add
+}
+```
+
+`[c + 0x10]` is the **first** field, `ConsumableItemDesc`. `Dictionary<string,_>.Add` throws
+`ArgumentException` on a duplicate key and `ArgumentNullException` on `null`, and this runs during
+the consumables boot — so:
+
+- **every element needs a distinct, non-null `ConsumableItemDesc`**;
+- one duplicate kills the whole catalogue load, not just that row.
+
+This is a case where a 200 with well-formed JSON still takes the subsystem down, and the throw is a
+plain BCL exception with no Rec Room literal to grep for.
+
+`RecNet.Consumables.TXSHETAYZEJ` `0x947FF00` is the row converter and references **zero** string
+literals, so it logs nothing on bad `ConfigurationData` either.
+
+---
+
+## ⚠️ CORRECTION / 2026: `getUnlocked` returns a DIFFERENT shape on build `20260323.14`
+
+Added **2026-10-13**. Everything above describes the **2025** build, where `getUnlocked` returns the
+10-key `.FDPNJHFIICP`. On 2026 the response type is generic inst **#23346 =
+`List<RecNet.BulkConsumable>`**, formatter **`Utf8Json.Formatters.RecNet.XYGBRZLNFVB`** `.ctor`
+**`0x9007060`** (confirmed via `py msig.py XYGBRZLNFVB`), and the key run is **8 keys**
+(52 literal refs = 22 unique casings × 2 + 8 ✓):
+
+| # | key | CLR | vs 2025 |
+|---|---|---|---|
+| 1 | `Ids` | `List<long>` | same |
+| 2 | `CreatedAts` | `List<DateTime>` | same |
+| 3 | `ConsumableItemDesc` | string | same |
+| 4 | `Count` | int | same |
+| 5 | `IsActive` | bool | same |
+| 6 | `ActiveDurationMinutes` | `int?` | same |
+| 7 | `IsTransferable` | bool | same |
+| 8 | **`IsRRO`** | bool | ⚠️ **NEW on 2026** |
+
+**Dropped on 2026:** `InitialCount`, `ThumbnailImageName`, `FriendlyName` — they now come only from
+the *definition* (`api/consumables/v1/all` / `query/bulk`), not from the inventory row.
+
+✅ **A payload built for the 2025 shape still works on 2026**: the three dropped keys are ignored,
+and the absent `IsRRO` deserializes to `false`, which is the safe value.
+
+⚠️ **Do not start sending `IsRRO: true`.** The definition side of that comparison
+(`RecNet.Consumable.IsRROConsumable`) is **not a wire key**, so it is always `false`, and the
+boot-awaited `ConvertBulkConsumableListToConsumableInstances` throws
+`InvalidDataException("Key IsRRO=True does not match Definition IsRRO=False!")`. Full mechanism in
+[consumables-v1-query-bulk](consumables-v1-query-bulk-wire-shape.md).
+
+**The boot-awaited chain this route starts:** `getUnlocked` → for each row's desc, resolve a
+definition from cache → **`POST api/consumables/v1/query/bulk` for the misses** → build instances.
+Every desc you return here must be definable by `/all` or `query/bulk`, or boot fails with
+`ArgumentNullException("definition")`. See
+[consumables-v1-query-bulk](consumables-v1-query-bulk-wire-shape.md).

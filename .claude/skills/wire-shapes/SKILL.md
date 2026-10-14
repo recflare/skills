@@ -58,7 +58,7 @@ then `solve_header.py` → `idtables{,2,3}.py` → `rebuild_metadata.py` → `re
 
 ## Already derived
 
-**[`references/CATALOG.md`](references/CATALOG.md)** — 126 routes, one file each, indexed by service
+**[`references/CATALOG.md`](references/CATALOG.md)** — 151 routes, one file each, indexed by service
 and path. Grep it before deriving anything. (`PROMPTS.md` at the repo root has ready-made openers for
 looking one up, deriving a missing one, and checking a live capture against the client.)
 
@@ -73,6 +73,7 @@ looking one up, deriving a missing one, and checking a live capture against the 
 | [nonobject-response-routes](references/conventions/nonobject-response-routes.md) | The 145 routes whose response T is a List or scalar — i.e. every endpoint that hard-fails with `Malformed Response: '{}'`. Generated table at il2cpp-2025/nonobject-responses.txt, plus the scan that rebuilds it. |
 | [jwt-role-privilege-claims](references/conventions/jwt-role-privilege-claims.md) | The client reads TWO token claims: `role` (15 entries incl. developer, moderator, influencer, screenshare, junior, whiteglove1/2) and `rn.privilege` (the CamelCase Ban* list). Each must be a JSON ARRAY of strings (or one bare string) - there is NO delimiter parsing, so "a b" or "a,b" silently grants nothing; matching is case-sensitive. Also: the "Volunteer Mod" nametag is role=moderator PLUS a player-side opt-in toggle, not any DTO field. |
 | [numeric-notification-enum](references/conventions/numeric-notification-enum.md) | Some websocket pushes dispatch by INTEGER type id from .EMNAKPGIHDN (39 members) and are therefore ABSENT from notifications-2025.txt, which is built from string literals - e.g. ConsumableMappingRemoved=71. How to find a numeric push's handler and payload, and why an ignored-response route can still have visible client effects. |
+| [2026-send-helper-tiers](references/conventions/2026-send-helper-tiers.md) | **Build 20260323.14 only.** The 2025 "friendlyActionDescription means enveloped" tell is DEAD on 2026 - every send takes one. Read the facade's return type instead: `Task<T>` = bare, `Task<IAHBKPCLGPS<T>>`/`Task<ZBIGKCZRHCL>` = the envelope IS T, `Task<XJAFUXFVGPU>` = status code only, non-generic `Task` = no response value. Plus the 7-step recipe for reading any 2026 route. |
 | [recnet-service-enum](references/conventions/recnet-service-enum.md) | The full RecNet service enum NNPMGHNBFMD for build 20250718.01 — 31 unobfuscated member names with values (Auth 1, API 2, Lists 13, Rooms 16, Econ 28 …); the number every wire-shape note calls 'svc N'. |
 
 Two exception types are worth recognising on sight: `IONCMJIACFI` ("Malformed Response") means the
@@ -98,7 +99,7 @@ was null or `Success == false`, so a bare-DTO endpoint can never raise it.
    | 2025 method on `MGPBDIAGCFD` | meaning |
    | --- | --- |
    | `HPBKMCLEANE<TResponse>` | send, response required |
-   | `CJBFDPLCIEJ<TResponse>(bool)` | send, nullable response |
+   | `CJBFDPLCIEJ<TResponse>(bool)` | send, **null allowed ONLY IF the `bool` argument is 1** — read it at the call site; `club/home/me` passes 0 and rejects a `null` body. See `references/endpoints/club-home-me-wire-shape.md` |
    | `CNDMDLNHDLI` | send, no response — **body ignored entirely** |
    | `KBIHOFDDIMI` | raw response |
    | `ELKIBCPINAP(byte[])` | sets the **request body** — its presence means there is one |

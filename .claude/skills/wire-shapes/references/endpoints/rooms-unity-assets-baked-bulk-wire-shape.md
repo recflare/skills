@@ -119,6 +119,47 @@ download was fast. Check this route's `Filename`/`Hash` before looking anywhere 
 `'Save {0} has a null UnityAssetId but a non-null UnityAsset, this should not happen.'` — a server
 that returns a row whose `UnityAssetId` does not match a requested GUID can surface that line.
 
+## 2026 build (`20260323.14`) — same shape, de-obfuscated names
+
+| role | 2025 `20250718.01` | 2026 `20260323.14` |
+|---|---|---|
+| entry method | `OALMDGJKBJH.FJELNOFBKKI` `0x7DF9140` | **`RecNet.Rooms.DFMBMRNABHU.KXVCEXPNCFP`** `0x95af0c0` |
+| response DTO | `EFBKLOHNCCB` | **`RecNet.Rooms.BakedUnityAssetDTO`** |
+| route literal | `0xD1840F8` | `0xFD86978` |
+
+```
+Task<List<RecNet.Rooms.BakedUnityAssetDTO>> KXVCEXPNCFP(
+    IReadOnlyList<Guid> unityAssetIds, byte target, int version, CancellationToken ct)
+```
+
+Same 5 fields in the same order, so one handler serves both builds.
+
+## ⚠️ The other failure mode: serving the main bake WITHOUT its dependency bakes
+
+The null-`Filename` hazard above is the silent half. The loud half is answering the main
+`UnityAssetId` correctly and **omitting the assets it depends on**.
+
+A room bake is one serialized file among many. The `RunTheBlock` bake
+(66 MB, `UnityFS` v8, `6000.0.27f1`) names **82 distinct `CAB-<32hex>` files** — its own plus **81
+externals**, none of which are in the client's 2,787 shipped Addressables bundles. Unity resolves an
+unloaded external file's pointers to `null`, including `m_Script`, so the symptom set is
+thousands of `The referenced script … is missing!`, then `MaterialMap has a null entry`,
+`PrefabRegistry has a null PrefabRegistration or null Prefab`, `Invalid RuntimeSpawnableToolConfig`
+for dozens of prefab ids, and finally `FailedToSpawnPlayer (Code 8700)` /
+`Unknown prefab <guid>` about two minutes into the load.
+
+**`unityAssetIds` is an `IReadOnlyList<Guid>` for exactly this reason** — the client resolves the main
+asset and its dependencies in one call, but only for ids the *save* told it about. A save returning
+`UnitySubAssets: []` / `ReferencedUnityAssets: []` / `ReferencedUnityAssetIds: []` yields a one-id
+request and a room that cannot be reconstructed.
+
+⚠️ **This is NOT a per-build bake problem.** An earlier version of this section blamed obfuscation
+re-rolling type names per client build; that is wrong — 91.6% of Unity-serialized types keep their
+real names, and all 25 script references in that bake resolve in the client. Bakes are portable.
+
+Full diagnosis, including how to pull a downloaded bundle out of `HTTPCache` and enumerate its CABs:
+[studio-asset-bundle-script-bind-failure-2026](../../../rr-client-bringup/references/studio-asset-bundle-script-bind-failure-2026.md).
+
 ## Sibling
 
 `rooms/{0}/subrooms/{1}/saves/no_unity_assets` (slot in the same literal region) is the *other* half

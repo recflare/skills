@@ -311,6 +311,11 @@ it switches a whole subsystem on, so expect second-order failures rather than on
 
 ### The crash that follows (`ObjectId = Invalid`)
 
+> ✅ **ROOT-CAUSED on the 2026 build 2026-10-14** — the whole chain is de-obfuscated, the crash is
+> a `Debugger.Break()` INT3 inside a catch block, and the switch is the Legacy-vs-ObjectModel Rbex
+> provider selected by the room version. See
+> [basement-objectid-invalid-crash-2026](../../../rr-client-bringup/references/basement-objectid-invalid-crash-2026.md).
+
 ```
 [Error] ObjectId = Invalid
 [Error] Lifetime = LoadInstance

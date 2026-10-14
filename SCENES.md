@@ -88,6 +88,14 @@ scene-location enum can be read straight off a capture:
 |---|---|
 | 0 `DORM_ROOM` | `dormroom2` |
 | 24 `MAKER_ROOM` | `Basement` |
+| 40/41 `MAKER_ROOM_2` | **`ugcr2`** |
+
+⚠️ **`MAKER_ROOM` (24) is the V1 maker room; `MAKER_ROOM_2` (40 here, **41** on build
+`20260323.14`) is its Rooms-2.0 counterpart.** Serving the `MAKER_ROOM` GUID for a room whose
+`UgcVersion` is `2` **hard-crashes the client** during the scene's `Awake` pass —
+[basement-objectid-invalid-crash-2026](.claude/skills/rr-client-bringup/references/basement-objectid-invalid-crash-2026.md).
+The GUIDs are stable across builds; **the integers are not** — re-read the registration `.cctor` per
+build (`LWWSBHUHPZM..cctor` `0xa18be80` on 2026).
 
 **`Basement` is `MAKER_ROOM`, not a fallback.** This matters when diagnosing "my custom room loads
 as the Maker Room": the client's *silent* fallback is `DORM_ROOM`/`dormroom2`, and it is always

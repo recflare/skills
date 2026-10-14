@@ -30,3 +30,17 @@ Cross-checks every earlier note: Matchmaking 4 ([matchmake-v2-room-wire-shape](.
 
 **Verb map** (`System.Net.Http.HttpMethod` static-field offsets, read as `[klass+0x90] + N`):
 `0x00` Delete, `0x08` Get, `0x20` Post, `0x28` Put.
+
+## Build `20260323.14`: identical for 0–29, plus `Cards = 30`
+
+`py enumvals.py Service` on the 2026 build (`RecNet.Service`, typedef #46523) — the enum **kept its
+real name and all member names** on this build, so it reads directly. Values **0–29 are unchanged**
+from 20250718.08's `NNPMGHNBFMD`, and there is one addition:
+
+```
+Cards = 30
+```
+
+So every `svc N` in this catalog transfers to the 2026 client as-is. Two 2026 routes pinned by it:
+`crm/me/config/v3` is **17 PlatformNotifications** (not a Chat or API service, despite the name) and
+`sampling?sessionId=` is **19 DataCollection**.

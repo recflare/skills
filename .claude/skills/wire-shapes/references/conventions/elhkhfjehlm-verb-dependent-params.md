@@ -80,3 +80,104 @@ Two things follow:
 **How to apply:** server-side, treat a trailing `?` as an empty query string and do not 400 on it.
 When auditing a capture, a bare `?` is not evidence of a parameter — count the `ELHKHFJEHLM` calls in
 the entry method instead.
+
+## The same mechanism on the 2026 build: `RGBOOBRDHEB.NJPEKLKCVCG`
+
+Confirmed **2026-10-13** on build `20260323.14`. The request builder is now
+**`RecNet.RGBOOBRDHEB`** (2025's `MGPBDIAGCFD`), and the parameter adder is
+**`NJPEKLKCVCG`** `0x9537F80`, which does the identical verb test:
+
+```
+r14 = this.<HttpMethod>  ; field +0x10, same offset as 2025
+al  = HttpMethod.op_Equality(r14, HttpMethod.get_method)   ; statics +0x08, at 0x9538022
+r9  = &this[+0x28]                                         ; 0x9538030
+test al, al                                                ; then pick the other list
+```
+
+So the rule carries over unchanged: **GET → query string, every other verb → form-urlencoded body.**
+
+Two differences worth knowing:
+
+- **There are three adders, not one.** `msig.py RGBOOBRDHEB` shows `NJPEKLKCVCG`, `ZTKGODPCQRW` and
+  `KTGGWMNSEXK` with identical `(string name, <value>)` overload sets (string / `DateTime` /
+  `IReadOnlyList<T>` / `object`). Only `NJPEKLKCVCG` has been read; **which of the other two is the
+  query-only or header variant is not established**, so do not assume a route's params are
+  verb-dependent just because *an* adder was called — disassemble the one at the call site.
+- **The response-cache TTL setter is `ORUUDATDRUN(TimeSpan, bool)`** (2025's `DIDJOECFJII`), and the
+  shared TTL constants live on `RecNet.Cache` — `.cctor` `0x9444C20` sets `+0x00` 1 min, `+0x08`
+  5 min, `+0x10` 10 min, `+0x18` **1 hour**, `+0x20` 24 hours. A route that sets one caches its
+  response client-side for that long; see [paintball-battle-pass](../endpoints/paintball-battle-pass-wire-shapes.md).
+
+**How to apply:** unchanged for GET-vs-other. When reading a 2026 route, get the verb from
+`[HttpMethod statics + N]` at the `RGBOOBRDHEB..ctor` call site (`0x00` delete, `0x08` get, `0x10`
+head, `0x18` options, `0x20` post, `0x28` put, `0x30` trace) — the service enum is the `r8d`
+immediate on that same call, because the per-service factory `NJDXKMQCUTD` bakes it in.
+
+---
+
+## ⚠️ 2026: there are THREE param families, not one — two of them IGNORE the verb
+
+Established **2026-10-13** from build `20260323.14`, after a live request to
+`POST api/consumables/v1/query/bulk` showed **`?configurationVersion=2` in the URL** while
+`descriptors` sat in the form body — i.e. two params on the **same POST** went to **different
+places**. ([consumables-v1-query-bulk](../endpoints/consumables-v1-query-bulk-wire-shape.md))
+
+`RecNet.RGBOOBRDHEB` (2026's `MGPBDIAGCFD`) keeps the same two collections —
+`GXDEVTXLNLF` **`+0x28`** and `ODWNBEXQFEH` **`+0x30`** — and **which collection is which is now
+proven**, from the verb branch in the bare `NJPEKLKCVCG` `0x9537F80`:
+
+```
+rdx = [[HttpMethod TypeInfo + 0x20] + 8]     ; HttpMethod.Get  (statics +0x08)
+al  = HttpMethod.op_Equality(this.Method, Get)        ; 0x9538022
+r9  = &this[+0x28]                                    ; 0x9538030  default
+test al, al                                           ; 0x9538034
+jne  0x9538053                                        ; 0x953804D  IS GET -> keep +0x28
+r9  = &this[+0x30]                                    ; 0x953804F  NOT GET -> switch
+call NJPEKLKCVCG(name, value, parameters, bool, bool) ; 0x9538053  explicit-list overload
+```
+
+GET's destination is `+0x28`, so:
+
+| `+0x28` `GXDEVTXLNLF` | **QUERY STRING** |
+|---|---|
+| `+0x30` `ODWNBEXQFEH` | **FORM-URLENCODED BODY** |
+
+And the three families are all thin wrappers over the same explicit-list overload
+`NJPEKLKCVCG(name, value, List<KeyValuePair<string,string>> parameters, …)`, differing **only** in
+which list they hand it:
+
+| family | passes | behaviour |
+|---|---|---|
+| **`NJPEKLKCVCG`** (bare, `0x9537F80`) | branches on the verb | **verb-dependent** — GET→query, else→body. The rule at the top of this file. |
+| **`ZTKGODPCQRW`** (`0x9539050`, `0x9539080`, `0x95390D0`) | `lea r9, [rcx + 0x28]` | ⚠️ **ALWAYS QUERY STRING**, even on POST/PUT |
+| **`KTGGWMNSEXK`** (`0x9537D70`, `0x9537D90`, `0x9537DC0`) | `lea r9, [rcx + 0x30]` | ⚠️ **ALWAYS FORM BODY**, even on GET |
+
+Each family has the same three overloads — `(string, string)`, `(string, DateTime)`,
+`(string, IReadOnlyList<T>)`, `(string, object)` — so they are easy to mistake for one another in a
+slot dump. **Read the method name, not just the param literal.**
+
+### How to avoid the mistake this note exists for
+
+In a `slots2025.py` dump the adder appears either as a resolved `call -> RecNet.RGBOOBRDHEB$$<NAME>`
+or as a `MethodRef RecNet.RGBOOBRDHEB::<NAME>` (for the generic `IReadOnlyList<T>` overloads, which
+are generic-shared). **Grepping only for `NJPEKLKCVCG` and finding nothing does not mean the params
+are verb-dependent — it means you have not found the adder yet.** That is exactly how this note's
+subject route was first mis-specified as all-form-body.
+
+### Blast radius — small, and enumerated
+
+`callxref` on all six force-a-side RVAs:
+
+- **`ZTKGODPCQRW`** — 13 direct sites, all in: `RecNet.HKIQYNCZHCQ.QSUKOMULOOV` (6),
+  the Game AI routes `<DescribeImage_GameAI>d__65`/`d__66`, `<EditImage_GameAI>d__67`,
+  `<GenerateImage_GameAI>d__69`, `<GenerateMeshRequestFromImage>d__61`,
+  `<GetConsumableDefinitions>d__35`, `<QuerySuperStageIngredient>d__10`.
+- **`KTGGWMNSEXK`** — 1 direct site, `<SuperStageIngredient>d__11`.
+- **`NJPEKLKCVCG`** bare — **237** sites.
+
+So the verb-dependent rule still covers the overwhelming majority, and **no other route currently in
+[CATALOG.md](../CATALOG.md) is among the force-a-side callers** — the existing notes stand.
+
+⚠️ **The `KTGGWMNSEXK` count is an undercount.** The `IReadOnlyList<T>` overloads are generic-shared,
+so a call reached through a methodSpec (as `descriptors` is in `d__35`, via inst #862) is invisible
+to `callxref`, which scans direct `call rel32` only. Treat 1 as a floor, not the total.
