@@ -101,6 +101,67 @@ def neighbours(data, i, length, span=60):
     return out
 
 
+def binary_guid_hits(data, tok, span=600):
+    """Newer builds store descs as RAW 16-byte Guid.ToByteArray() instead of ASCII.
+
+    Confirmed on the 2021.3.29f1 refresh of the 20230414 install, where every dashed and
+    base64url spelling vanished from resources.assets while the item table kept its
+    `(Name)` strings. The record is
+
+        [16 raw bytes][int32 len]"(Name)"[16 raw bytes][int32 len]...binary...
+        [int32 0x20]"<32-hex asset guid>" [int32 n][int32 0x20]"<32-hex asset guid>"
+
+    so the asset guids are length-prefixed 32-hex strings a short way FORWARD of the hit.
+    The forward walk STOPS at the second `(Name)` string: a record carries exactly one name,
+    so a second one means the next record has started. Without that stop a 400-byte window
+    silently harvests the neighbours' prefabs -- the same record-boundary trap the ASCII
+    tables have, one layer down. Returns (guids, names) in file order; ordering carries no
+    meaning -- fromdesc classifies by the catalog path suffix (.prefab vs .mat).
+    """
+    try:
+        raw = uuid.UUID(tok.strip()).bytes_le
+    except Exception:
+        return [], []
+    guids, names, start = [], [], 0
+    while True:
+        i = data.find(raw, start)
+        if i < 0:
+            break
+        start = i + 1
+        # Only the record's OWN key slot is immediately followed by its `(Name)` string.
+        # The same guid also appears inside OTHER records (as a parent/related desc slot),
+        # and walking forward from those harvests the neighbours' prefabs.
+        try:
+            n0 = struct.unpack_from("<i", data, i + 16)[0]
+        except Exception:
+            continue
+        if not (0 < n0 < 120):
+            continue
+        head = data[i + 20:i + 20 + n0]
+        if not (head[:1] == b"(" and head[-1:] == b")" and all(32 <= c < 127 for c in head)):
+            continue
+        j, hi, seen_name = i + 16, min(len(data), i + 16 + span), False
+        while j < hi:
+            try:
+                n = struct.unpack_from("<i", data, j)[0]
+            except Exception:
+                break
+            if 2 < n < 120 and all(32 <= c < 127 for c in data[j + 4:j + 4 + n]):
+                v = data[j + 4:j + 4 + n].decode()
+                if v.startswith("(") and v.endswith(")"):
+                    if seen_name:
+                        break              # a record holds ONE name -- this is the next record
+                    seen_name = True
+                    if v not in names:
+                        names.append(v)
+                elif HEX32.match(v) and v not in guids:
+                    guids.append(v)
+                j = (j + 4 + n + 3) & ~3
+            else:
+                j += 4
+    return guids, names
+
+
 def find_guids(data, tok):
     """All asset guids the registry maps this token to, plus any human name seen nearby."""
     guids, names = [], []
@@ -120,6 +181,10 @@ def find_guids(data, tok):
             for v in neighbours(data, i, len(b)):
                 if v.startswith("(") and v.endswith(")") and v not in names:
                     names.append(v)
+    if not guids:                              # newer builds: raw 16-byte guid, no ASCII spelling
+        bg, bn = binary_guid_hits(data, tok)
+        guids += [g for g in bg if g not in guids]
+        names += [n for n in bn if n not in names]
     return guids, names
 
 

@@ -42,3 +42,91 @@ room. Returning `Enabled:false` disables room XP entirely for that room.
 are actually an **`application/x-www-form-urlencoded` request body** — `ELHKHFJEHLM` routes params
 to the query string only for GET. See [elhkhfjehlm-verb-dependent-params](../conventions/elhkhfjehlm-verb-dependent-params.md). Response shape
 unaffected.
+
+## ✅ Re-verified on 2026 (`20260323.14`), 2026-10-15 — POST shape CONFIRMED
+
+The 2025 answer (valueless envelope) **holds on 2026**, but it is now read off the return type rather
+than inferred from a helper heuristic, which is what
+[2026-send-helper-tiers](../conventions/2026-send-helper-tiers.md) requires.
+
+`POST https://rooms.<host>/rooms/{roomId}/experience` — service **16 Rooms**.
+
+```
+RecNet.BCCLXUUKAES.ZCMGGYNQEMH(long roomId, bool enabled, int dailyLimit)
+    -> Task<RecNet.RecNetResult>                                   0x956beb0
+```
+
+| | |
+|---|---|
+| path | `String.Format("{0}/{1}/experience", "rooms", roomId)` — literals `'rooms'` + `'{0}/{1}/experience'` (**`0xFCD8D40`**). ⚠️ Grepping `rooms/{0}/experience` still finds nothing. |
+| **verb** | **POST** — `HttpMethod` statics **`[+0x20]`**, read at `0x956bf86` |
+| params | `enabled`, then `dailyLimit`, both via `RGBOOBRDHEB.NJPEKLKCVCG` — **verb-dependent**, and the verb is POST, so they are an **`application/x-www-form-urlencoded` body** |
+| send | **`RGBOOBRDHEB.ZWUODKCINOA<RecNet.RecNetResult>`** (generic inst **#3201**) — the **plain** send, no nullable tier |
+| **response T** | **`RecNet.RecNetResult`** — the **valueless envelope** |
+
+Manager-level pass-through: `RecRoom.Systems.Economy.RoomExperience.RoomExperienceManager.ZCMGGYNQEMH(long, bool, int)`
+`0xfd29b0`, same signature. The whole facade reads cleanly, so the sibling tiers come free:
+
+```
+Task<RecNet.RoomExperience>                            QYCBURIJOFR / AWKQPGUKTTQ(long, ct)   // GET  .../experience        bare
+Task<RecNet.PlayerRoomExperience>                      XUUDVVTEEBO / BSLIUDXFWDN(long, ct)   // GET  .../experience/player bare
+Task<RecNetResultObject<RecNet.PlayerRoomExperience>>  QIENBFUSPCL(long, int, Guid?)         // POST .../experience/player enveloped+Value
+Task<RecNetResultObject<RecNet.PlayerRoomExperience>>  RVIEFVGIZFG(long, int?, Guid?)        // POST .../experience/coOwner
+Task<RecNet.RecNetResult>                              ZCMGGYNQEMH(long, bool, int)          // POST .../experience        enveloped, NO Value
+```
+
+`RecNet.RoomExperience` and `RecNet.PlayerRoomExperience` are **unobfuscated** on 2026.
+
+### The exact response
+
+Formatter **`Utf8Json.Formatters.RecNet.VTLMXGUPIAK`** `.ctor 0x8e55120`, confirmed by `msig`:
+`Deserialize(JsonReader, FSNHROPLCPN) -> RecNet.RecNetResult`. The trailing `____stringByteKeys` run
+is **three** keys in this order:
+
+```json
+{ "Success": true, "Error": null, "error_id": null }
+```
+
+Accepted casings from `____keyMapping`: `Success`/`success`, `Error`/`error`, and
+**`Error_id`/`error_id`** — so the third key tolerates a capital `E`, but **emit `error_id`**.
+
+`RecNet.RecNetResult` has **9 methods and no post-deserialize hook at all** (three property pairs plus
+`Ok()`, `Fail(string error, string errorId)`, `.ctor`) — nothing validates.
+
+### Two traps
+
+1. **`{}` is a FAILURE response, not an empty success.** `Success` is a plain `bool`, so an omitted
+   key deserializes to `false`. Always send `"Success": true` explicitly.
+2. **Send the object — not `204`, not an empty body.** The send is the plain `ZWUODKCINOA<T>` with no
+   allow-null tier, so an absent value risks
+   `RecNetMalformedResponseException: Response was empty`.
+
+**Not traced:** what the client does when `Success == false`. On 2026 the helper never unwraps, so the
+*caller* inspects the envelope — and the callers here reach the facade through UJect interface
+dispatch (`callxref` on both `ZCMGGYNQEMH` entries returns 0 direct sites), so this needs a capture
+rather than more disassembly.
+
+## Bonus: the same envelope explains `Malformed Response: 'false'` in the 2026 logs
+
+`VTLMXGUPIAK` is the formatter in this log stack, seen twice in a live session:
+
+```
+Malformed Response: 'false'
+  Utf8Json.JsonReader.CJLPSZMYGAN
+  Utf8Json.Formatters.RecNet.VTLMXGUPIAK.Deserialize
+  RecNet.BVIXCNIZYIX.DRECUPUEDKL
+  RRUI.Data.MakerAIModel.RefreshInternal
+```
+
+`RecNet.BVIXCNIZYIX.DRECUPUEDKL(bool a, ct) -> Task<RecNet.ZBIGKCZRHCL>` `0x9440a50` is
+**`GET api/makerai/checkfreetrialeligibility`** (literal `0xFC57990`), and `ZBIGKCZRHCL` is the
+valueless-envelope **interface** whose concrete wire type is `RecNetResult`. A server answering a bare
+`false` therefore throws. **It wants the envelope:**
+
+```json
+{ "Success": false, "Error": null, "error_id": null }
+```
+
+That closes the `makerai/checkfreetrialeligibility` item in
+[post-join-residual-log-items-2026](../../../rr-client-bringup/references/post-join-residual-log-items-2026.md)
+(and note the 1-hour client cache there — relaunch between attempts).

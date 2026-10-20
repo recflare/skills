@@ -14,9 +14,15 @@ Derived **2026-10-13** from build `20260323.14`, from a live `HTTP Error 404` wh
 trace named `RecNet.Storefronts.VLJOMTQFWRE` as the originating frame — see
 [2026-send-helper-tiers](../conventions/2026-send-helper-tiers.md) for that workflow.
 
-Route literal `'api/storefronts/v1/purchasableitems'` **`0xFCB...`** (sites `0x9563280` /
-`0x9563414`). **POST** (`[HttpMethod statics + 0x20]` read at `0x95633ed`), service **28 Econ**
-(`mov r8d, 0x1c` at `0x956341B`).
+Route literal `'api/storefronts/v1/purchasableitems'` **`0xFC703C0`** (re-confirmed 2026-10-19 —
+`mxref` gives exactly **4** refs, two per state machine: `0x9563282` / `0x9563416` in
+`d__34$$MoveNext` `0x95631A0` and `0x9562E02` / `0x9562F96` in `d__33$$MoveNext` `0x9562D20`, which
+is the gift-drop-id sibling below). **POST** (`[HttpMethod statics + 0x20]` read at `0x95633ed`),
+service **28 Econ** (`mov r8d, 0x1c` at `0x956341B`).
+
+⚠️ On this build the static-fields pointer is `[klass+0x20]`, not 2025's `[klass+0x90]`; the `+0x20`
+above is the offset *inside* static fields (= `Post`). See
+[custom-badges-2026](custom-badges-2026-wire-shapes.md) for the measured sequence.
 
 ## Call chain — read it bottom-up from the log
 

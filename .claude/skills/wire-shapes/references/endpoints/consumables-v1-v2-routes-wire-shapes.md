@@ -497,13 +497,23 @@ Added **2026-10-13**. Everything above describes the **2025** build, where `getU
 **Dropped on 2026:** `InitialCount`, `ThumbnailImageName`, `FriendlyName` — they now come only from
 the *definition* (`api/consumables/v1/all` / `query/bulk`), not from the inventory row.
 
-✅ **A payload built for the 2025 shape still works on 2026**: the three dropped keys are ignored,
-and the absent `IsRRO` deserializes to `false`, which is the safe value.
+⚠️ **A payload built for the 2025 shape does NOT simply work on 2026.** The three dropped keys are
+ignored harmlessly, but the absent `IsRRO` deserializes to `false`, and **`false` is only correct for
+`ugc.`-prefixed descs.**
 
-⚠️ **Do not start sending `IsRRO: true`.** The definition side of that comparison
-(`RecNet.Consumable.IsRROConsumable`) is **not a wire key**, so it is always `false`, and the
-boot-awaited `ConvertBulkConsumableListToConsumableInstances` throws
-`InvalidDataException("Key IsRRO=True does not match Definition IsRRO=False!")`. Full mechanism in
+⚠️ **CORRECTED 2026-10-19 — `IsRRO` must MATCH the desc, and an earlier revision of this file had it
+backwards.** It said "do not start sending `IsRRO: true` … it is always `false`". Wrong:
+`RecNet.Consumable.IsRROConsumable` is not a wire key but it **is derived**, by the post-deserialize
+hook `RecNet.Consumable.EMSIIQRWASQ` `0x9473080`:
+
+```
+IsRROConsumable = !ConsumableItemDesc.StartsWith("ugc.")
+```
+
+So a **first-party** consumable (any desc not starting `ugc.`) has definition `IsRRO = true` and
+**requires `IsRRO: true` on the wire**; only `ugc.`-prefixed descs take `false`. Sending the wrong one
+throws `InvalidDataException("Key IsRRO={0} does not match Definition IsRRO={1}!")` from
+`RecNet.Consumables+BXHGCFIHTWE..ctor`. Full mechanism and the lookup table in
 [consumables-v1-query-bulk](consumables-v1-query-bulk-wire-shape.md).
 
 **The boot-awaited chain this route starts:** `getUnlocked` → for each row's desc, resolve a
@@ -511,3 +521,110 @@ definition from cache → **`POST api/consumables/v1/query/bulk` for the misses*
 Every desc you return here must be definable by `/all` or `query/bulk`, or boot fails with
 `ArgumentNullException("definition")`. See
 [consumables-v1-query-bulk](consumables-v1-query-bulk-wire-shape.md).
+
+---
+
+# ⚠️ 2026 (`20260323.14`): push 70/71 changed shape AND gained a gate
+
+Derived **2026-10-19** while diagnosing "purchase succeeds, `ConsumableMappingAdded` sent, item never
+appears in the backpack, no error anywhere". Everything above in this file is `20250718.01`.
+On 2026 both the payload and the handler are different, and the handler **fails silently**.
+
+2026 de-obfuscates the names: the enum is **`.PushNotificationId`** (typedef #22551), not
+`.EMNAKPGIHDN`. Ids are unchanged — `ConsumableMappingAdded = 70`, `ConsumableMappingRemoved = 71`,
+`StorefrontBalanceAdd/Update/Purchase = 60/61/62`.
+
+## The payload is `RecNet.ConsumableInstanceDTO` — 9 keys, not 2025's 11
+
+Formatter **`Utf8Json.Formatters.RecNet.QQQHJAPFPSZ`** `.ctor 0x9133250` (bounds `..0x91338FD`),
+`____stringByteKeys` run **`0x913376F..0x91338B3`**:
+
+| # | key | CLR | note |
+|---|---|---|---|
+| 1 | **`Id`** | long | ⚠️ `[DataMember]` rename of the C# property **`InstanceId`** |
+| 2 | `ConsumableItemDesc` | string | **the gate — see below** |
+| 3 | `CreatedAt` | DateTime | ISO-8601 |
+| 4 | `Count` | int | |
+| 5 | `ActiveDurationMinutes` | `int?` | `null` ≠ `0` |
+| 6 | `IsActive` | bool | |
+| 7 | `IsTransferable` | bool | |
+| 8 | `ActivatedByRoomie` | bool | |
+| 9 | **`IsRRO`** | bool | **NEW on 2026**, and part of the identity key |
+
+**Gone vs 2025:** `InitialCount`, `ThumbnailImageName`, `FriendlyName`. Same three that 2026 dropped
+from `getUnlocked`'s `BulkConsumable` — consistent, and they are dropped **silently** as unknown keys
+if you keep sending the 2025 shape.
+
+Key count is provably complete: 25 unique casings × 2 + 9 = **59** literal refs, 59 observed.
+(`Id` and `Count` contribute 2 casings each, not 3 — camelCase and all-lowercase collide.)
+
+⚠️ **There is no `InstanceId` string literal anywhere in the binary.** Grepping for the C# property
+name finds nothing and looks like "this is not a wire DTO" — it is, under the key `Id`. Pin the
+formatter by `msig` on the `Serialize` signature, not by grepping the property name.
+
+## ⚠️ The 2026 handler is async and gated on a descriptor lookup
+
+`<OnConsumableMappingAdded>d__30$$MoveNext` **`0x9492B50`** (bounds `..0x9492F81`) — the
+compiler-generated name survives obfuscation; the outer method does not. It:
+
+1. **awaits `RecNet.Consumables.LVWFDHJHQSS(string consumableItemDesc, bool isRRO)`**
+   `0x947F310` → `Task<RecNet.MGTBPZYXKTT>` — the **consumable definition** for that desc;
+2. constructs `RecNet.ConsumableInstanceKey { InstanceId, IsRRO }` (typedef #21699 — the identity is
+   the **pair**, not the id alone) at `0x9492DDD`;
+3. constructs a `.BXHGCFIHTWE` at `0x9492E70`;
+4. calls **`RecNet.Consumables.ERYIQCGWBWH(ConsumableInstanceDTO, MGTBPZYXKTT, YFITXAVPIID)`**
+   at `0x9492E95` — the cache insert, which **requires the resolved definition as its 2nd argument**.
+
+**So an unresolvable `ConsumableItemDesc` means step 1 yields nothing and step 4 never runs. The
+row is never inserted, and `py names.py 0x9492b50 0x431` reports ZERO literals — the handler logs
+nothing at all.** That is the whole "notification sent, no backpack row, no error" symptom.
+
+This is the 2026 regression in behaviour: on 2025 the handler (`PEEKIHPGAGG.GHBJMIDPOCD`) read only
+`Id` and inserted. On 2026 the push is only as good as the **catalog** behind it.
+
+### What the server must guarantee
+
+1. The pushed `ConsumableItemDesc` must be **byte-identical** to one the client can define from
+   `GET api/consumables/v1/all?supportedVersion=2` or `POST api/consumables/v1/query/bulk`.
+   Same uniqueness requirement as the boot path above.
+2. **`IsRRO` must equal `!ConsumableItemDesc.StartsWith("ugc.")`** — i.e. **`true` for every
+   first-party consumable**, `false` only for `ugc.`-prefixed descs. It is both an argument to the
+   lookup and half of `ConsumableInstanceKey`, and a mismatch throws
+   `InvalidDataException("Key IsRRO={0} does not match Definition IsRRO={1}!")` from
+   `BXHGCFIHTWE..ctor`. **Confirmed live 2026-10-19** in the direction an earlier revision of these
+   notes called impossible (`Key IsRRO=False does not match Definition IsRRO=True!`).
+3. `Id` is the long inventory-row id the client will later use for consume/remove — the same
+   identity contract as 2025's `Id`.
+
+### Diagnostic order for "purchased but not in the backpack"
+
+1. **Relog.** The backpack also populates from `getUnlocked`. Appears after relog ⇒ the grant worked
+   and the **push** is at fault (continue below). Still absent ⇒ `bulkpurchase` never granted it and
+   the push is a red herring — fix the grant first.
+2. **Check `IsRRO` against the `ugc.` rule first** — this is the one that actually bit in the field.
+   A first-party desc with `IsRRO` omitted or `false` throws
+   `InvalidDataException: Key IsRRO=False does not match Definition IsRRO=True!`, logged under
+   `[RecNet.Features.Consumables]` with `BXHGCFIHTWE..ctor` →
+   `RecNet.Consumables.FZMPXEYHPDE(ConsumableInstanceDTO)` `0x947E6A0` (the real name of the
+   obfuscated outer handler, recovered from a live trace) in the frames.
+   ⚠️ **Unlike the desc-resolve failure, this one DOES log** — so a silent no-op points at step 3,
+   while a logged `InvalidDataException` points here.
+3. Grep the client log for **`'Missing Consumable Definition for desc '`** (`0xFC55DE0`, logged from
+   `<>c$$GQBMCJKYHQY` `0x94978F0`). That is the descriptor-resolve failure, and the handler itself
+   logs nothing.
+4. Diff the pushed desc against the `/all` response for a byte-exact match.
+5. Only then suspect the rest of the payload shape — a 2025-shaped push deserializes fine apart from
+   `IsRRO`: `Id`, `ConsumableItemDesc`, `CreatedAt`, `Count`, `ActiveDurationMinutes`, `IsActive`,
+   `IsTransferable` and `ActivatedByRoomie` all still match, and the three extras are dropped.
+
+A first-party consumable (desc does **not** start `ugc.`), which is the common `bulkpurchase` case:
+
+```json
+{ "Id": 90210, "ConsumableItemDesc": "consumable.confetti_cannon",
+  "CreatedAt": "2026-10-19T00:00:00Z", "Count": 1, "ActiveDurationMinutes": null,
+  "IsActive": false, "IsTransferable": false, "ActivatedByRoomie": false, "IsRRO": true }
+```
+
+Related: [storefronts-v1-purchasableitems](storefronts-v1-purchasableitems-wire-shape.md) (the store
+tab that lists these), [econ-bulkpurchase](econ-bulkpurchase-wire-shape.md) (the purchase itself),
+[numeric-notification-enum](../conventions/numeric-notification-enum.md).

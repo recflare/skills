@@ -22,13 +22,18 @@ Verified against the reference export:
     Re-serializing the reference DTO with this module reproduces its 2942 bytes exactly.
 
 usage:
-    py caiexport.py fromdesc <data-dir> <desc> <out-root> [outfit-type]
+    py caiexport.py fromdesc <data-dir> <desc> <out-root> [outfit-type] [item-id] [fb-desc]
     py caiexport.py build    <spec.json> <out-root>
     py caiexport.py verify   <export-dir>
 
 `fromdesc` is the idempotent path: every identity (CustomAvatarItemId, UnityAssetId, and
 each CDN-style filename) is derived from the desc via caiids.py, so re-exporting the same
 desc rewrites the same folder with the same ids instead of minting a duplicate item.
+
+The derived CustomAvatarItemId is a FALLBACK for when the desc is all you have. If the
+catalogue already owns an id for this item, pass it as [item-id] -- an invented id that
+disagrees with the server's is a duplicate item, not a cosmetic difference. UnityAssetIds
+stay desc-derived either way; they are per-save upload ids with no external source here.
 """
 
 import base64
@@ -37,6 +42,7 @@ import json
 import os
 import shutil
 import sys
+import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import caiids
@@ -195,33 +201,67 @@ def cdnname(seed):
     return "".join(alpha[(n >> (5 * i)) % 36] for i in range(25))
 
 
-def fromdesc(data_dir, desc, out_root, outfit_type=None, body_types=(0, 1, 2), when=None):
-    """Build an export for a shipped item, keyed entirely off its AvatarItemDesc."""
-    import descresolve
+def _resolve_one(descresolve, data, cat, desc):
+    """desc -> (item-table name, prefab bundle, material bundle).
 
-    data = open(os.path.join(data_dir, "resources.assets"), "rb").read()
-    cat = descresolve.Catalog(os.path.join(data_dir, "StreamingAssets", "aa"))
-
-    name, main_bundle, mat_bundle, item_guid = None, None, None, None
+    `n` in AdditionalConfiguration is the ITEM-TABLE name, not the prefab basename. The two
+    differ and the item table is inconsistent about the BB_ prefix, so neither can be derived
+    from the other -- measured on both reference exports (2026-10-16):
+        (ChickOutfit_Wrist)      item table, vs prefab (BB_ChickOutfit_Wrist)
+        (BB_MLM_Chupacabra_Mouth) item table AND prefab, prefix kept
+        (Mouth_CurlyMustache)    item table, vs prefab (BB_CurlyMustache_Mouth)
+    Both real exports carry the item-table spelling verbatim.
+    """
+    name, prefab_name, main_bundle, mat_bundle = None, None, None, None
     for tok in descresolve.candidates(desc):
-        guids, _names = descresolve.find_guids(data, tok)
-        if guids and item_guid is None and "," not in tok:
-            item_guid = caiids._dashed(tok)
+        guids, names = descresolve.find_guids(data, tok)
+        if len(names) == 1 and name is None:
+            name = names[0]
         for g in guids:
             for path, bundles in cat.lookup(g):
                 if not bundles:
                     continue
                 if path.endswith(".prefab") and main_bundle is None:
-                    name = os.path.basename(path)[: -len(".prefab")]
+                    prefab_name = os.path.basename(path)[: -len(".prefab")]
                     main_bundle = bundles[0]
                 elif path.endswith(".mat") and mat_bundle is None:
                     mat_bundle = bundles[0]
+    if name is None:                           # ambiguous item table: fall back, and say so
+        name = prefab_name
+        if name:
+            print("  ! item-table name ambiguous for %s; using prefab name %s" % (desc, name))
     if not (name and main_bundle and mat_bundle):
-        raise SystemExit("could not resolve desc: name=%r main=%r mat=%r" % (name, main_bundle, mat_bundle))
+        raise SystemExit("could not resolve %s: name=%r main=%r mat=%r"
+                         % (desc, name, main_bundle, mat_bundle))
+    return name, main_bundle, mat_bundle
+
+
+def fromdesc(data_dir, desc, out_root, outfit_type=None, item_id=None, fb_desc=None,
+             body_types=(0, 1, 2), when=None):
+    """Build an export for a shipped item, keyed off its AvatarItemDesc(s).
+
+    `fb_desc` is the full-body (FB_) variant's desc. BodyType 1 uses it; 0 and 2 use `desc`
+    -- the split both reference exports use. With it, each save gets `a` = its OWN desc and
+    `p` = the partner's, which is how (ChickOutfit_Wrist) does it (the two swap between
+    BodyType 0 and 1; verified by resolving both guids to the BB_ and FB_ prefabs).
+    """
+    import descresolve
+
+    data = open(os.path.join(data_dir, "resources.assets"), "rb").read()
+    cat = descresolve.Catalog(os.path.join(data_dir, "StreamingAssets", "aa"))
+
+    base = _resolve_one(descresolve, data, cat, desc)
+    full = _resolve_one(descresolve, data, cat, fb_desc) if fb_desc else None
+    name = base[0]
 
     bun = os.path.join(data_dir, "StreamingAssets", "aa", "StandaloneWindows64")
     canon = caiids.canon(desc)
-    cai = str(caiids.item_id(desc))
+    if item_id:
+        cai = str(uuid.UUID(str(item_id)))   # caller-supplied: the catalogue already owns it
+        cai_src = "supplied"
+    else:
+        cai = str(caiids.item_id(desc))      # fallback: derived from the canonical desc
+        cai_src = "derived from desc"
     stamp = when or "2026-01-01T00:00:00.000Z"
     otype = int(outfit_type) if outfit_type is not None else 101
     staging = os.path.join(out_root, ".staging-" + cai)
@@ -229,15 +269,20 @@ def fromdesc(data_dir, desc, out_root, outfit_type=None, body_types=(0, 1, 2), w
 
     saves = []
     for bt in body_types:
-        cfg = {"v": 1, "d": {"n": name, "o": otype, "b": bt}}
-        if item_guid:
-            cfg["d"]["a"] = item_guid
-            cfg["ls"] = 1
-        m = os.path.join(staging, cdnname(canon + "|main|%d" % bt) + ".assetbundle")
-        t = os.path.join(staging, cdnname(canon + "|mat|%d" % bt) + ".assetbundle")
-        shutil.copyfile(os.path.join(bun, main_bundle), m)
-        shutil.copyfile(os.path.join(bun, mat_bundle), t)
-        thumb = os.path.join(staging, cdnname(canon + "|thumb|%d" % bt) + ".png")
+        use_fb = full is not None and bt == 1
+        vname, vmain, vmat = full if use_fb else base
+        own, partner = (fb_desc, desc) if use_fb else (desc, fb_desc)
+        cfg = {"v": 1, "d": {"n": vname, "o": otype, "b": bt}}
+        cfg["d"]["a"] = caiids._dashed(own)
+        if partner:
+            cfg["d"]["p"] = caiids._dashed(partner)
+        cfg["ls"] = 1
+        tag = "%s|%s|%%s|%d" % (canon, "fb" if use_fb else "bb", bt)
+        m = os.path.join(staging, cdnname(tag % "main") + ".assetbundle")
+        t = os.path.join(staging, cdnname(tag % "mat") + ".assetbundle")
+        shutil.copyfile(os.path.join(bun, vmain), m)
+        shutil.copyfile(os.path.join(bun, vmat), t)
+        thumb = os.path.join(staging, cdnname(tag % "thumb") + ".png")
         if not os.path.exists(thumb):
             placeholder_png(thumb)
         saves.append({
@@ -265,11 +310,13 @@ def fromdesc(data_dir, desc, out_root, outfit_type=None, body_types=(0, 1, 2), w
 
     dest = os.path.join(out_root, name)
     if os.path.isdir(dest):
-        shutil.rmtree(dest)          # same desc -> same ids, so a re-export REPLACES
+        shutil.rmtree(dest)          # same ids -> a re-export REPLACES
     build(spec, out_root)
     shutil.rmtree(staging, ignore_errors=True)
     print("desc      %s" % canon)
-    print("item id   %s   (stable: re-running rewrites this same folder)" % cai)
+    if fb_desc:
+        print("fb desc   %s   -> BodyType 1" % caiids._dashed(fb_desc))
+    print("item id   %s   (%s; re-running rewrites this same folder)" % (cai, cai_src))
 
 
 def placeholder_png(path):
@@ -293,7 +340,7 @@ if __name__ == "__main__":
         print(__doc__)
         sys.exit(2)
     if sys.argv[1] == "fromdesc":
-        fromdesc(sys.argv[2], sys.argv[3], sys.argv[4], *sys.argv[5:6])
+        fromdesc(sys.argv[2], sys.argv[3], sys.argv[4], *sys.argv[5:8])
     elif sys.argv[1] == "build":
         build(sys.argv[2], sys.argv[3])
     elif sys.argv[1] == "verify":

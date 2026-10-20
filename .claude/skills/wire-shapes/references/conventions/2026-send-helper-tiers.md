@@ -17,6 +17,13 @@ Established **2026-10-13** across five derivations:
 **2025:** "a leading `friendlyActionDescription` on the send helper means enveloped"
 (`MGPBDIAGCFD.HPBKMCLEANE` vs `CJBFDPLCIEJ`), and `CNDMDLNHDLI` means the body is ignored.
 
+> ⚠️ That 2025 rule is **correct and still load-bearing on 2025** — re-confirmed 2026-10-16 across
+> nine Lists routes, where the description-carrying facade helper `PJPLCMBOAFB` is enveloped and the
+> description-free `NDBMFFLDBBK`/`LMKONLJOAEP` are bare on the *same* paths. See
+> [2025-facade-helper-tiers](2025-facade-helper-tiers.md). What 2026 retired is the rule's
+> **applicability to 2026**, not its truth on 2025. A route can therefore be bare on 2026 and
+> enveloped on 2025 with an identical DTO.
+
 **2026:** *every* send takes a `friendlyActionDescription` — the generic senders are declared
 
 ```
@@ -127,6 +134,23 @@ A non-2xx raises **`RecNet.RecNetWebException`** with the message built by
 So for a non-generic-`Task` route the server contract is just: **any 2xx (prefer `204 No Content`)
 to accept, any non-2xx to reject.** The body is discarded either way, so there is nothing to get
 wrong in it — and nothing you can put in it to signal a soft failure.
+
+### ⚠️ On **2025** this tier behaves the opposite way (added 2026-10-16)
+
+Do not carry the sentence above back to `20250718.01`. There, the no-response helper
+(`HJKOEIEIJPB$$MoveNext` `0x7E27390` on the Lists facade, one sibling per facade class) sends with
+`MGPBDIAGCFD::HPBKMCLEANE<.JFNAKFCGDAO>` — the **response-required** send over the valueless
+envelope — and throws **`LLCLDPPAGIJ`** when `Success` is not `true`:
+
+| build | non-generic `Task` route expects |
+|---|---|
+| `20250718.01` | **`{"Success": true, "Error": null, "error_id": null}`** + 2xx. `204`/empty ⇒ `IONCMJIACFI`; `{}` ⇒ `LLCLDPPAGIJ` |
+| `20260323.14` | any 2xx, body discarded |
+
+So the 2026 simplification is a real behaviour change, not just a renaming. Confirm the build before
+telling a server a valueless write can answer `204` —
+[llcldppagij-envelope-failure-exception](llcldppagij-envelope-failure-exception.md) has the build
+fingerprint.
 
 ## How to read a 2026 route, in order
 

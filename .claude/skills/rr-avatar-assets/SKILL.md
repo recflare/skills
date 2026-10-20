@@ -44,18 +44,27 @@ These are the ones that produce a **confident wrong answer**, not an error:
 | Descs are stored as 22-char **base64url** guids as well as dashed ones | decode a token, grep the dashed guid, get `0 hits` across the whole install and conclude the item is not in the build | [desc-registry-2023-layout](references/desc-registry-2023-layout.md) |
 | A registry key is **not always one token** | the two halves of a combination desc each resolve to nothing; only the joined `a,b,` key exists | [desc-registry-2023-layout](references/desc-registry-2023-layout.md) |
 | An itemId and a desc are **adjacent fields**, not one string | a pasted `id,desc` concatenation matches nothing anywhere | [desc-registry-2023-layout](references/desc-registry-2023-layout.md) |
-| The **system name is not unique** | several descs resolve to one prefab name, so name-keyed ids merge distinct variants into one item | [cai-export-format](references/cai-export-format.md) |
+| The **system name is not unique** | several descs resolve to one prefab name, so name-keyed ids merge distinct variants into one item | [cross-build-port-and-2025-encrypted-serializedfiles](references/cross-build-port-and-2025-encrypted-serializedfiles.md) | The 2025 build encrypts EVERY serialized file (resources.assets, sharedassets*, globalgamemanagers*, level*, catalog.json) behind an `00 00 52 52 00 00 52 52` header, but NOT the .bundle files - so descresolve/aacatalog are 2023-only and a grep of the 2025 data dir is a silent false negative. Use bundlescan with a positive control. Worked Curly Mustache lookup and why a cross-build port is a rebuild. |
+| [cai-export-format](references/cai-export-format.md) |
+
+| A **2025** grep for a name or desc returns a clean `0 hits` | the asset looks absent from the target build; actually every serialized file is encrypted | [cross-build-port-and-2025-encrypted-serializedfiles](references/cross-build-port-and-2025-encrypted-serializedfiles.md) |
 
 Two more that bite at load time rather than lookup time:
 
-- **Unity version.** The `S:\RecRoom\1` export library is `6000.0.27f1`; recflare-2025 runs
-  `2021.3.41f1` and recflare-2023 runs `2020.3.33f1`. Unity refuses a bundle from a newer major
-  version. Check before assuming an export will load.
-- **Packaging.** Shipped built-ins are **Addressables** bundles with external dependency bundles.
-  CAI bundles are self-contained `Main`+`Material` pairs whose *internal* name is derived from
-  `UnityAssetId`. `caiexport.py` builds a correct wrapper around a shipped bundle, but that bundle
-  still cannot resolve its dependencies — converting one to the other is a Unity **rebuild**, not a
-  file copy.
+- **Bundle format, not Unity version.** The `S:\RecRoom\1` library is `6000.0.27f1`,
+  recflare-2025 runs `2021.3.41f1`, the refreshed recflare-2023 `2021.3.29f1` — and all three are
+  **bundle format 8** and load each other’s bundles fine (user-confirmed wearing a `6000.0.27f1`
+  item in the 2025 client). The original `20230414` build was format **7**, which is the real
+  hazard. Read the format `u32` right after the 8-byte `UnityFS` magic, not the version string. ⚠️ This
+  **retires** the old "Unity refuses a bundle from a newer major version" rule — see
+  [cai-export-format](references/cai-export-format.md).
+- **Packaging.** Shipped built-ins are **Addressables** bundles: `m_Container` is keyed by full
+  asset path and they carry external dependency bundles. A CAI bundle keys its container by the
+  single literal `prefab` (`MaterialMap` for the material half) and has no dependencies — key it
+  wrong and the client logs `OutfitPrefab for AvatarItem "..." is null`. `caiexport.py` builds the
+  wrapper only; **`C:\Games\asset-converter\rr_pc_cai_convert.py` does the Main-bundle surgery**
+  headlessly (no Unity editor). The Material half still needs a donor CAI bundle as a template.
+  See [cai-export-format](references/cai-export-format.md).
 
 ## Reference notes
 

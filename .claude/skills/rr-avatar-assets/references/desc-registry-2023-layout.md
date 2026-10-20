@@ -120,3 +120,47 @@ does **not** exist anywhere in the build. It is `[itemId]` concatenated with the
 `[desc]` that follows it in the record. Each piece resolves on its own; the concatenation resolves to
 nothing, and searching for it is the kind of clean `hits=0` that looks like "the item isn't in this
 build" when it actually is. Split on the first comma and re-check before concluding anything.
+
+## ⚠️ A THIRD encoding: newer builds store the desc as RAW 16 BYTES
+
+Found **2026-10-16** when the `recflare-2023` install was updated in place. The refreshed build is
+**Unity `2021.3.29f1`**, bundle format **8**, **9,177** bundles (was `2020.3.33f1` / format 7 /
+6,499), and its `resources.assets` and `catalog.json` are **still plain** (unlike 2025's, see
+[cross-build-port-and-2025-encrypted-serializedfiles](cross-build-port-and-2025-encrypted-serializedfiles.md)).
+
+**Every ASCII spelling of a desc is gone.** It stores `Guid.ToByteArray()` verbatim:
+
+| form | `6b337a35-95d9-4b3a-9891-d9fbb06262aa` | hits |
+|---|---|---|
+| dashed | `6b337a35-95d9-4b3a-9891-d9fbb06262aa` | **0** |
+| base64url | `NXoza9mVOkuYkdn7sGJiqg` | **0** |
+| 32-hex | `6b337a3595d94b3a9891d9fbb06262aa` | **0** |
+| **raw bytes_le** | `35 7a 33 6b d9 95 3a 4b 98 91 d9 fb b0 62 62 aa` | **4** |
+| raw big-endian | — | 0 |
+
+The item table keeps its `(Name)` strings, so a name grep still works while every desc lookup
+returns a clean nothing. Record shape:
+
+```
+[16 raw bytes = the desc][int32 len]"(Name)"[16 raw bytes][int32 0x14][binary]
+[16 raw bytes = the SIBLING variant's desc][8 bytes]
+[int32 0x20]"<32-hex prefab guid>"[int32 count][int32 0x20]"<32-hex material guid>"
+```
+
+`descresolve.py` now searches this form (`binary_guid_hits`). Three corrections were needed before it
+was right, each of which first produced a confident wrong answer:
+
+1. **A 420-byte forward window harvests the neighbours' prefabs.** Both mustache descs came back with
+   four items including `(BB_BewitchedBroom_Shoulder)`. Fix: stop at the **second** `(Name)` — a
+   record holds exactly one.
+2. **The same guid also appears inside OTHER records**, in the sibling slot, so walking forward from
+   every occurrence still bled. Fix: only walk from the occurrence **immediately followed by its own
+   `(Name)`** — the record's key slot. (Of 4 occurrences, 1 qualifies.)
+3. **The material went missing.** The `int32 count == 1` between the two guids decodes as a
+   single-space "string", and the walker strided over the material's length prefix. Fix: require
+   `n > 2`.
+
+> **Always run the positive control.** The first run of the unpatched tool said
+> `no registry entry` for the mustache — and also for `f76b709c-…` (Shirt_Golfer) and
+> `E9VTiIVFPEa-OuQRto0e_Q` (SteamPunk). Known-good descs failing is what distinguishes "tool broken
+> on this build" from "item not in this build"; without that check the item looks deleted.

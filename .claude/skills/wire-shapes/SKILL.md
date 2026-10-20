@@ -58,7 +58,7 @@ then `solve_header.py` → `idtables{,2,3}.py` → `rebuild_metadata.py` → `re
 
 ## Already derived
 
-**[`references/CATALOG.md`](references/CATALOG.md)** — 151 routes, one file each, indexed by service
+**[`references/CATALOG.md`](references/CATALOG.md)** — 166 routes, one file each, indexed by service
 and path. Grep it before deriving anything. (`PROMPTS.md` at the repo root has ready-made openers for
 looking one up, deriving a missing one, and checking a live capture against the client.)
 
@@ -66,6 +66,7 @@ looking one up, deriving a missing one, and checking a live capture against the 
 
 | Rule | What it settles |
 |---|---|
+| [2025-facade-helper-tiers](references/conventions/2025-facade-helper-tiers.md) | On 20250718.01 the FACADE helper decides the envelope, not the MGPBDIAGCFD request methods: PJPLCMBOAFB (carries a friendlyActionDescription) is ENVELOPED and unwraps Value; NDBMFFLDBBK/LMKONLJOAEP are BARE. Reads and writes on the SAME path differ. A route can be bare on 2026 and enveloped on 2025 with an identical DTO. |
 | [elhkhfjehlm-verb-dependent-params](references/conventions/elhkhfjehlm-verb-dependent-params.md) | CORRECTION: MGPBDIAGCFD.ELHKHFJEHLM is NOT a query-param adder — it branches on the verb. GET puts params in the query string; every other verb puts them in an application/x-www-form-urlencoded BODY. |
 | [ioncmjiacfi-malformed-response](references/conventions/ioncmjiacfi-malformed-response.md) | IONCMJIACFI 'Malformed Response' in recflare-2025 is thrown by MGPBDIAGCFD.KKEIDMPEHAL<T> when the body is empty or fails to deserialize into T — a '{}' body means the endpoint expects an ARRAY or a scalar, not an object. |
 | [llcldppagij-envelope-failure-exception](references/conventions/llcldppagij-envelope-failure-exception.md) | LLCLDPPAGIJ is recflare-2025's generic 'RecNet envelope reported failure' exception — thrown only when an ENVELOPED response is null or Success==false, never by a bare-DTO endpoint. |
@@ -148,9 +149,15 @@ into a plain enum, so the entire body is a **bare integer**.
 ### Verb and service
 
 From the `AKJEAMCCEOH..ctor(HttpMethod, service, path)` call site: `r8d` is the service enum, and
-the `HttpMethod` comes from `[klass+0x90]` (static fields) at a fixed offset —
+the `HttpMethod` comes from the **static-fields pointer** at a fixed offset —
 
 `0x00` Delete · `0x08` **Get** · `0x10` Head · `0x18` Options · `0x20` **Post** · `0x28` **Put** · `0x30` Trace
+
+⚠️ **The static-fields pointer itself is build-specific**: `[klass+0x90]` on `20250718.01`,
+**`[klass+0x20]`** on `20260323.14`. The offsets *inside* static fields (the table above) are the
+same on both. Read the pair of `mov`s, don't assume the outer offset —
+[custom-badges-2026](references/endpoints/custom-badges-2026-wire-shapes.md) has the measured 2026
+sequence and the control that pinned it.
 
 `py rangedis.py <start> <end>` to read both. **Verify the verb, never infer it from the path** —
 `outfits/me` and `rooms/{id}/experience` each serve two verbs with completely different responses.

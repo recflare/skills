@@ -116,24 +116,45 @@ just with a different exception. **Return a definition for every `descriptors` v
 If a desc is genuinely unknown, returning a stub definition with that exact
 `ConsumableItemDesc` is safer than omitting it.
 
-## ⚠️ The `IsRRO` trap — never send `IsRRO: true` on `getUnlocked`
+## ⚠️ `IsRRO` must equal `!ConsumableItemDesc.StartsWith("ugc.")`
 
-The same method validates the instance key against the definition and throws
-**`InvalidDataException("Key IsRRO={0} does not match Definition IsRRO={1}!")`** (literal
-`0x948E00A`, ctor `0x948E04A`).
+> ⚠️ **CORRECTED 2026-10-19.** An earlier revision of this section said "never send `IsRRO: true`
+> — it can never match and throws unconditionally". **That was wrong**, and it caused real
+> misdiagnosis: a first-party consumable requires `IsRRO: true`, and sending `false` is what throws.
+> The error below was observed live in the **inverse** direction the old text claimed was impossible:
+> `Key IsRRO=False does not match Definition IsRRO=True!`
+
+The instance key is validated against the definition, throwing
+**`InvalidDataException("Key IsRRO={0} does not match Definition IsRRO={1}!")`**
+(literal `0xFE26FF8` on `20260323.14`), from
+**`RecNet.Consumables+BXHGCFIHTWE..ctor(ConsumableInstanceKey, MGTBPZYXKTT, int, DateTime, int?, bool, bool, bool)`**.
 
 - The **key** side is `RecNet.ConsumableInstanceKey{long InstanceId, bool IsRRO}`, and its `IsRRO`
-  comes from **`BulkConsumable.IsRRO`, which IS a wire key on `getUnlocked`** (see below).
-- The **definition** side is `MGTBPZYXKTT.get_IsRROConsumable()`, backed by
-  `RecNet.Consumable.IsRROConsumable` — which is **not a wire key at all**, so for anything that
-  came from `/all` or `query/bulk` it is **always `false`**.
+  comes from the wire — `BulkConsumable.IsRRO` on `getUnlocked`, or the `IsRRO` key on the
+  `ConsumableMappingAdded` push payload.
+- The **definition** side is `MGTBPZYXKTT.get_IsRROConsumable()` (an **interface** — typedef #21810,
+  `decl -1`, getters only), backed by `RecNet.Consumable.IsRROConsumable`, the only type in the
+  build carrying that field. It is **not a wire key** on `/all` *or* `query/bulk` (both are the same
+  8-key shape) — but it is **not always `false`** either, because it is **derived**.
 
-**Therefore `IsRRO: true` on a `getUnlocked` row can never match and throws unconditionally**, on
-the boot-awaited path. ✅ Omitting the key (or sending `false`) is the safe answer, and omitting it
-deserializes to `false`. Only a client-side built-in definition could ever satisfy `IsRRO: true`.
+**`RecNet.Consumable.EMSIIQRWASQ` `0x9473080`** (bounds `..0x94731BD`), the post-deserialize hook:
 
-Not traced: whether any non-wire implementer of `MGTBPZYXKTT` is registered for true-RRO
-consumables. Treat `IsRRO: true` as unsupported from the server side until that is established.
+```
+if (this.ConsumableItemDesc /* +0x10 */ == null) return;
+this.IsRROConsumable /* +0x58 */ = !ConsumableItemDesc.StartsWith("ugc.");   ; 0x94730DD, xor al,1
+```
+
+The literal is **`'ugc.'`** (`lea` `0x94730B3`, `mov` `0x94730D6`). So **RRO = Rec Room Original**:
+
+| `ConsumableItemDesc` | definition `IsRRO` | what the key side must send |
+|---|---|---|
+| starts with **`ugc.`** | `false` | **`IsRRO: false`** (or omit — deserializes to `false`) |
+| anything else (first-party) | **`true`** | **`IsRRO: true`** |
+
+✅ **The rule is "match the desc", not "always false".** Omitting the key is only correct for
+`ugc.`-prefixed descs. For a first-party consumable — the common case for anything granted by
+`bulkpurchase` out of the shipped catalogue — omitting `IsRRO` throws on the boot-awaited path, and
+on the push path silently prevents the backpack row.
 
 ## Siblings on `RecNet.Consumables` reached by the same cache
 

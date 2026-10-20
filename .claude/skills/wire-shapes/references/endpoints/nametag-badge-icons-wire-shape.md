@@ -6,6 +6,14 @@
 > **`GET api/influencerpartnerprogram/influencers`** and testing `InfluencerIds.Contains(accountId)`.
 > ⚠️ `Party` outranks it, so a player in your party shows the party badge instead of their checkmark.
 
+> ⚠️ **This note is `20250718.01`.** On `20260323.14` `AccountBadgeIconType` has **11** members, not
+> 4 — values 0–3 are unchanged (so the `influencerpartnerprogram` finding below still holds), but
+> `Developer(4)`, `Cheer_Helpful(5)`, `Cheer_General(6)`, `Cheer_Sportsmanship(7)`,
+> `Cheer_GreatHost(8)`, `Cheer_Creative(9)` and `League(10)` are new and the priority chain has
+> **not** been re-derived for them. See
+> [custom-badges-2026](custom-badges-2026-wire-shapes.md) §5.
+> Unrelated to the *custom badge* feature (wearable avatar-item badges), which that note covers.
+
 Derived **2026-10-08** from build `20250718.01`. Companion to
 [jwt-role-privilege-claims](../conventions/jwt-role-privilege-claims.md) (the `Developer` / `Community Team` /
 `Volunteer Mod` **text label**, a different element on the same nametag) and
