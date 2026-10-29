@@ -12,6 +12,11 @@
 Derived **2026-10-06** from build `20250718.01`.
 Response DTO is the same one documented in [rooms-room-by-id](rooms-room-by-id-wire-shape.md) — not repeated here.
 
+> 🔄 **Re-verified on build `20260323.14` (2026-10-26)** — shapes unchanged, but the read-back has
+> **two hard throws** that were not known in 2025, and one permission was **renamed**. Everything
+> below is the 2025 derivation; see **[2026 update](#2026-update-build-20260323140)** at the end for
+> the plain type names, the throws, and the rename. Read that section first if you are on 2026.
+
 `PUT https://rooms.<host>/rooms/{roomId}/subrooms/{subRoomId}/permissions` — service **16 = Rooms**,
 facade `OALMDGJKBJH`. Path is `String.Format("rooms/{0}/subrooms/{1}/permissions", roomId, subRoomId)`,
 literal slot **`0xD1A81E8`**. Verb **PUT** (`HttpMethod` statics `[rcx+0x28]` at `0x7DF980E`).
@@ -341,3 +346,202 @@ assignment**, carrying no permission values at all. The in-client role object is
 routes on the same facade and literal family: `rooms/{0}/subrooms/{1}/modify`,
 `.../accessibility`, `.../name`, `.../maxplayers`, `.../move`, `.../clone`,
 `.../default_matchmaking_policy`, `.../autostage`, `.../publish_save`.
+
+---
+
+## 2026 update (build `20260323.14`)
+
+Re-derived **2026-10-26**. **Both wire shapes are byte-for-byte unchanged from 2025.** What changed is
+that `RecNet.Rooms` type names are **no longer obfuscated**, two **hard throws** in the applier are
+now visible, and one permission **member name was renamed** — which matters because `Permission`
+travels as the member *name*.
+
+### Plain names for everything the 2025 text calls by an obfuscated name
+
+| 2025 | 2026 |
+|---|---|
+| `OALMDGJKBJH` (facade) | `RecNet.Rooms.DFMBMRNABHU` |
+| `FOHKKKNNPAA` `0x7DF96F0` (the PUT) | **`GXBPMUJHTAH` `0x95ADAB0`** |
+| `BAKBFPICHDM` `0x7DF5610` (room-level twin) | **`POHARNOOWJH`** |
+| `KCHDMOJGHJD.NPPNKOILMFK` (the read-back) | **`DFMBMRNABHU.HQCEGSSASNS` `0x95ADF40`** |
+| `.OAANAMJCIDA` | **`RecNet.Rooms.RolePermissionDTO`** (#23466) |
+| `.FEJPDKONECB` | **`RecNet.Rooms.PhotonAccessTokenAndPermissionsDTO`** (#23457) |
+| `.HGMJJMJDHLJ` | **`RecNet.Rooms.RoomDetailsDTO`** |
+| `.OGKGADHHDKM` (42 permissions) | **`RecRoom.DataLayer.RolePermission`** (#62218) |
+| `.PHBPGMMKBJJ` (8 roles) | **`RecRoom.DataLayer.AccountRoleType`** (#62198) |
+| `.IGAEHBCMEEN` (Bool/Int/StringList) | **`RecNet.Rooms.RolePermissionType`** (#23467) |
+| `.FFHJBMHNGMN` (the GameRole decoy) | **`.RolePermission`** (#11339) — still a collision, see below |
+| `.DFBNLBFNPDP` (the applier) | **`RecRoom.Systems.PlayerRoles.WXOXYAWQQII`** |
+| `LADMPAMHNKG` (per-entry applier) | **`LGRKEJPRDSI`** |
+| `BMLPAEEDGDK` (change listener) | **`JKEEZMLERNO` `0xA253210`** |
+| `RoomPermissionModel.MCKOCLIDLPO` etc. | `RRUI.Data.RoomPermissionModel` — **fully unobfuscated** (`Set` `0x287DD60`, `OnPermissionsUpdated` `0x287D9D0`, `IsFieldRequestInProgress` `0x287D970`, `RefreshInternal` `0x287DA10`, `get_DefaultRoomRole` `0x287EFB0`) |
+
+Enum values are **identical** to the 2025 tables — `AccountRoleType` is still the sparse
+`0,1,10,20,25,30,31,255`, `RolePermissionType` still `Bool 0 / Int 1 / StringList 2`, and
+`RolePermission` still carries the same 42 members at the same values.
+
+### Both verbs re-confirmed
+
+Facade signatures via `msig`:
+
+```
+Task<RoomDetailsDTO>                      GXBPMUJHTAH(long roomId, long subRoomId,
+                                                      IReadOnlyList<RolePermissionDTO>, ct)
+Task<RoomDetailsDTO>                      POHARNOOWJH(long roomId,
+                                                      IReadOnlyList<RolePermissionDTO>, ct)
+Task<PhotonAccessTokenAndPermissionsDTO>  HQCEGSSASNS(ct)
+```
+
+| route | verb | evidence |
+|---|---|---|
+| `rooms/{0}/subrooms/{1}/permissions` | **PUT** | `0x95ADBBF mov rcx,[rax+0x20]` → `0x95ADBC3 mov rsi,[rcx+0x28]` — **`+0x28` = `Put`** |
+| `photon_access_token` | **GET** | `0x95ADFDB mov rcx,[rax+0x20]` → `0x95ADFF4 mov rdx,[rcx+8]` — **`+0x08` = `Get`** |
+
+Both are svc **16 Rooms** — `photon_access_token` lives on the **same `DFMBMRNABHU` facade** as
+`rooms/hot`, so `GET rooms.<host>/photon_access_token` is the correct URL. It takes a
+`requestBuilderAction` of **`null`** (`[rsp+0x20] = 0` at `0x95ADFEB`), i.e. **no query parameters
+and no body at all**.
+
+### Envelope tiers — unchanged, and the 2026 helper taxonomy that proves it
+
+The 2026 send helpers on `DFMBMRNABHU`, from `msig`:
+
+| helper | signature | tier |
+|---|---|---|
+| `XNYOJFPCXJH<T>` / `Get<T>` | `(HttpMethod, route, ct, builder) -> Task<T>` | **bare** — no description |
+| `MSBYXMTYOOH` | `(string desc, HttpMethod, route, ct, builder) -> Task` | enveloped, **`Value` discarded** |
+| `MSBYXMTYOOH<T>` | `(string desc, HttpMethod, route, ct, builder) -> Task<T>` | **enveloped with `Value`** |
+| `LKVNIZZZQYH<T>` | same shape | **enveloped with `Value`** |
+| `HIMXSOWXWZF<T>` | `-> Task<List<T>>` | enveloped list |
+
+So the 2025 rule still holds verbatim on 2026: **a leading `friendlyActionDescription` argument is the
+envelope tell.** The PUT passes one (`rdx` = `'change subroom permissions'` at `0x95ADC3A`, then
+`r8` = verb, `r9` = route, plus a generic type token in `[rsp+0x30]`) → **enveloped**. The GET passes
+the verb in `rdx` with no description → **bare**.
+
+⚠️ Worth stating because the sibling route **one method over** did lose its envelope on 2026:
+`HAGCWUSHAAP` (`rooms/{0}/leaderboards/{1}`, `0x95ADC90`) returns **non-generic `Task`** and calls the
+**non-generic** `MSBYXMTYOOH` at `0x95AF8E0` — see [rooms-leaderboards](rooms-leaderboards-wire-shape.md).
+Envelope tier is still per-helper on 2026, and adjacency proves nothing.
+
+### Wire keys re-read from the 2026 formatters
+
+`PhotonAccessTokenAndPermissionsDTO` → formatter **`Utf8Json.Formatters.RecNet.Rooms.PFTAHAPWHXR`**
+`.ctor 0x8EC2790` (msig-confirmed). `____stringByteKeys` = the trailing run
+`0x8EC299E`/`0x8EC29CA`/`0x8EC29EE` — **3 keys, unchanged**:
+
+| # | key | CLR |
+|---|---|---|
+| 1 | `RoomInstanceId` | long |
+| 2 | `PhotonAccessToken` | string |
+| 3 | `Permissions` | `IReadOnlyList<RolePermissionDTO>` |
+
+The 2025 note's unexplained "4th self-typed clone slot" is now readable: it is a **static** named
+**`Offline`** at offset `0x0000` (`.cctor 0x95CD8F0`), a client-side offline fallback instance. **Not
+a wire key.**
+
+`RolePermissionDTO` → formatter **`NNTZVNBXPEW`** `.ctor 0x8ED1C30`, trailing run
+`0x8ED1E9D`..`0x8ED1F41` — **5 keys, unchanged**: `Permission`, `Role`, `Override`, `Type`, `Value`.
+The positional `.ctor` is now self-naming:
+`.ctor(string permission, AccountRoleType role, bool override, RolePermissionType type, string value)`.
+
+**Neither DTO has a post-deserialize hook** — `msig` shows only property accessors and constructors
+on both, so no validation hook can fire here. The throws below are in the *applier*, not the parser.
+
+### 🔴 NEW: the applier has TWO HARD THROWS — one bad entry reverts EVERY toggle
+
+This is the most important 2026 finding and it **upgrades the 2025 diagnosis**. The 2025 note
+described a missing `(Permission, Role)` pair as making one row "fall back to the default". That is
+not what happens. `WXOXYAWQQII.JKEEZMLERNO(PhotonAccessTokenAndPermissionsDTO)` `0xA253210` — the
+function that consumes the `photon_access_token` payload — **throws**:
+
+```
+0xa2533be  je   0xa25388c            ; Permissions (DTO field +0x20) is null
+0xa25388c  ...
+0xa2538a3  lea  rcx, -> "recNetRoomPermissionsDtos"
+0xa2538b8  call System.ArgumentNullException$$.ctor      ; THROW #1
+
+0xa2534b0  movzx edx, al              ; the Role byte
+0xa2534b3  call <TryGetValue on [r15+0x40]>   ; client's role -> defaults table
+0xa2534b8  test al, al
+           ...
+0xa253915  lea  rcx, -> "Invalid role. No defaults found!"
+0xa25392a  call System.InvalidOperationException$$.ctor  ; THROW #2
+```
+
+| # | trigger | throw |
+|---|---|---|
+| 1 | `Permissions` is **`null`** | `ArgumentNullException("recNetRoomPermissionsDtos")` |
+| 2 | a `Role` byte with **no entry in the client's role-defaults table** | `InvalidOperationException("Invalid role. No defaults found!")` |
+
+**Consequence:** these throw out of the apply loop, so the array is applied **all-or-nothing**. A
+single entry carrying a `Role` the client cannot resolve discards **every** permission in the payload,
+not just that entry — so every toggle in the UI reverts, which looks exactly like a response-shape
+problem on the PUT. `AccountRoleType` is sparse, so any byte outside
+`{0, 1, 10, 20, 25, 30, 31, 255}` — `2`, `5`, `11`, `100` — hits throw #2.
+
+**`"Invalid role. No defaults found!"` is a greppable client-log string.** Searching the client log
+for it is the single cheapest way to separate this from an envelope fault.
+
+Rules that follow:
+
+- **`Permissions` must be `[]`, never `null`.**
+- **Every `Role` byte must be an `AccountRoleType` member.** Validate server-side against the sparse
+  set; do not pass through a role id from your own schema.
+- The all-or-nothing behaviour means **one stale row poisons the whole payload**, so a server that
+  grew a new role tier must not emit it until the client build knows it.
+
+### `(Permission, Role)` is still the composite key
+
+Re-confirmed on 2026 — the per-entry applier takes role and permission as **separate arguments**:
+
+```
+static bool WXOXYAWQQII.LGRKEJPRDSI(RecRoom.DataLayer.AccountRoleType role,
+                                    RecRoom.DataLayer.RolePermission permission,
+                                    RecNet.Rooms.RolePermissionDTO dto,
+                                    <>c__DisplayClass51_0 env)
+```
+
+with role-scoped lookups `WKQPMDPNGJB(AccountRoleType)` and `SVQSLRWPLNR(AccountRoleType, bool)`.
+**`Role: 0` (`None`) is still not a wildcard.** The 2025 confirmed root cause — a PUT for `Role: 10`
+(`Host`) reverting because the read-back only carried `Role 0` and `Role 255` — is unchanged on 2026.
+
+### 🔴 NEW: `RolePermission` 19 was RENAMED — `DEPRECATED_CAN_EDIT_CIRCUITS` → `CAN_EDIT_CIRCUITS`
+
+`Permission` goes on the wire as the **member name**, so this is a breaking rename for any server that
+persisted the 2025 string:
+
+| value | 2025 name | 2026 name |
+|---|---|---|
+| 19 | `DEPRECATED_CAN_EDIT_CIRCUITS` | **`CAN_EDIT_CIRCUITS`** |
+
+A stored `"DEPRECATED_CAN_EDIT_CIRCUITS"` no longer matches anything the 2026 client resolves, so that
+row reverts. Every other one of the 42 members kept its name and value.
+
+### The two-enum collision got worse
+
+`py fieldfind.py CAN_SELF_REVIVE` now returns **one** typedef (`RecRoom.DataLayer.RolePermission`), so
+that name is safe to disambiguate with. But `CAN_USE_DELETE_ALL_BUTTON` still returns **two**, and the
+decoy grew to **74 members**:
+
+| typedef | name | `CAN_USE_DELETE_ALL_BUTTON` | `CAN_EDIT_CIRCUITS` |
+|---|---|---|---|
+| #62218 | **`RecRoom.DataLayer.RolePermission`** | **14** | **19** |
+| #11339 | `.RolePermission` (GameRole) | 84 | 88 |
+
+⚠️ **The two enums now share the *short* name `RolePermission` as well as member names**, so a
+name-based lookup that used to be unambiguous no longer is — always qualify with
+`RecRoom.DataLayer.`. `CAN_EDIT_CIRCUITS` is a **new** overlap created by the rename above. The
+decoy's new members are `CREATION_RESTRICTIONS_APPLY 85`, `CAN_CREATE_ROLE_ASSIGNMENT_CHIPS 86`,
+`CAN_EDIT_CIRCUITS 88`.
+
+### 🔎 Open: there is a push channel for this payload
+
+`RecNet.NotificationDto_PhotonAccessTokenAndPermissionsDTO` (`.ctor 0x9517C00`) exists, which means
+the permissions payload **can be delivered as a websocket push**, not only on the GET. This closes the
+2025 note's open question ("…or refreshed by a push") in the affirmative — a server *can* push updated
+permissions instead of relying on a re-fetch.
+
+⚠️ **The channel id is NOT derived.** The type has 0 call sites (registered by the generic notification
+machinery) and only a `.ctor`, and `regall.py` is Tier B so it does not run on the carved build. Until
+the id is pinned, assume the client only learns new permissions from `GET photon_access_token`.

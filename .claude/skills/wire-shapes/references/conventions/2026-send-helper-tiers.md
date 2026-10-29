@@ -175,3 +175,48 @@ fingerprint.
 **How to apply:** on a 2026 route, never guess the envelope from the path, a sibling, or the presence
 of a friendly string — `msig` the facade and read `T`. A non-generic `Task` or a `Task<XJAFUXFVGPU>`
 means stop looking for a response shape; there isn't one.
+## The envelope oracle — one `mfind` settles the tier
+
+Added **2026-10-28** from
+[roomearningsdistributions](../endpoints/roomearningsdistributions-wire-shape.md).
+
+A facade that declares `Task<T>` / `MPVTAJGPRUT<T>` with `T` = a bare DTO is **not** proof the wire
+body is bare: the **generic** `KGLKSSUUEOH::FQWUEPYTLAQ<T>(MPVTAJGPRUT<RecNetResult<T>>) ->
+MPVTAJGPRUT<T>` unwraps `Value` before the facade's signature is reached, so an enveloped route and
+a bare route look identical in `msig`.
+
+Because IL2CPP emits a **concrete typedef per generic instantiation**, the deserialize target leaves
+a fingerprint. 2026 ships **74** of them:
+
+```sh
+py mfind.py RecNetResultObject_          # all 74
+py mfind.py RecNetResultObject_<DtoName> # 1 hit = ENVELOPED, 0 hits = BARE
+```
+
+Validated against routes already derived by other means:
+
+| `T` | instantiations | tier (independently derived) |
+|---|---|---|
+| `RoomEarningsDistributionDTO` | **1** (`.ctor 0x953A620`) | enveloped |
+| `RoomInviteDTO` | **1** (`.ctor 0x953A6E0`) | enveloped — `Messages.UGZQVQQCGMR` even declares `RecNetResult<RoomInviteDTO>` outright |
+| `ClubDetails` | **1** (`.ctor 0x9539A20`) | enveloped |
+| `RoomConsumableInventoryItemOperationResult` | **0** | bare ([roomconsumables-consume](../endpoints/roomconsumables-consume-wire-shape.md)) |
+| `RoomConsumable` | **0** | bare |
+| `PhotonAccessTokenAndPermissionsDTO` | **0** | bare |
+
+**How to apply:** when a facade returns `MPVTAJGPRUT<SomeDTO>` / `Task<SomeDTO>`, run the one-hit
+check before writing the shape down. Then corroborate at the call site by the **arity of the final
+collapse**:
+
+| collapse call | arity | meaning |
+|---|---|---|
+| `0x942D310` (named, non-generic `FQWUEPYTLAQ`) | 1 arg, `MethodInfo* = NULL` (`xor edx,edx`) | **value-less envelope**, `T` = `RecNet.RecNetResult` |
+| `0x3C092F0` (generic-shared) | 1 arg **+ a real `MethodInfo`** | **enveloped with `Value`**, `T` = `RecNetResult<DTO>` |
+| `0x9537A00` `JEYAQXBXMRA` | — | body **never parsed** |
+| no collapse at all | — | **bare** |
+
+⚠️ Two cautions. The oracle says *a* `RecNetResult<T>` is deserialized somewhere, not *which* route
+does it — it is decisive only when `T` appears on a single route (check with `callxref` on the DTO's
+formatter or the facade). And a **0** result can only ever be read as "no enveloped instantiation
+exists", which is genuinely conclusive for the negative case but says nothing about `XJAFUXFVGPU`
+(status-code-only) routes.

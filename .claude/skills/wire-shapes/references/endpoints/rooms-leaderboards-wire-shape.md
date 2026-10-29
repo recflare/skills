@@ -63,3 +63,47 @@ Related but different service: the leaderboard *stat* routes (`leaderboard/GetPl
 are actually an **`application/x-www-form-urlencoded` request body** — `ELHKHFJEHLM` routes params
 to the query string only for GET. See [elhkhfjehlm-verb-dependent-params](../conventions/elhkhfjehlm-verb-dependent-params.md). Response shape
 unaffected.
+
+# ⚠️ 2026 (`20260323.14`): the ENVELOPE IS GONE — the body is no longer parsed
+
+Derived **2026-10-22**. Verbs, path and parameters are unchanged; **the response tier changed.**
+
+Facade is now **`RecNet.Rooms.DFMBMRNABHU`**:
+
+```csharp
+Task HAGCWUSHAAP(long roomId, int index, string title, int statFormat, bool sortAscending, ct)  // 0x95ADC90
+Task JJUTAZWMGZY(long roomId, int index, ct)                                                    // 0x95AE820
+```
+
+| | 2025 | 2026 |
+|---|---|---|
+| path | `rooms/{0}/leaderboards/{1}` | same, literal **`0xFD66620`** (exactly 4 refs = 2 methods × 2) |
+| verbs | POST · DELETE | same — `[statics+0x20]` at `0x95ADDA9` (POST), `[statics+0x00]` at `0x95AE8C5` (DELETE) |
+| params | `leaderboardTitle`, `statFormat`, `sortAscending` in a **form-urlencoded body** | **same three**, all referenced from the closure **`XKLIFIKKMWF.HOBGDNEBDWH`** (`0xFC393D8`, `0xFC45CC0`, `0xFC10CE0`) |
+| response | **valueless envelope** `{Success, Error, error_id}`, `Success != true` throws `LLCLDPPAGIJ` | **nothing is parsed** |
+
+Both methods return a **non-generic `Task`**, and both go through the **non-generic** overload of the
+class-bound send helper:
+
+```csharp
+Task         DFMBMRNABHU.MSBYXMTYOOH(string friendlyActionDescription, HttpMethod, string route, ct, Action<RGBOOBRDHEB>)
+Task<!!T>    DFMBMRNABHU.MSBYXMTYOOH(...)   // the generic sibling — NOT used here
+```
+
+Call sites `0x95ADE43` (POST, description `'create or update room leaderboard metadata'`) and
+`0x95AE92A` (DELETE, `'delete room leaderboard metadata'`).
+
+Per [2026-send-helper-tiers](../conventions/2026-send-helper-tiers.md), **a non-generic `Task` means
+no response value at all** — the body is never deserialized.
+
+➡️ **Consequences for the server:**
+- `{"Success":true,...}` is still *accepted*, but only because it is ignored. An **empty body is
+  equally fine**.
+- ⚠️ **`{"Success":false}` no longer fails the call.** On 2025 that threw `LLCLDPPAGIJ` and the UI
+  reported the error; on 2026 it is silently discarded and the client treats the operation as having
+  succeeded. **Denials must be a non-2xx HTTP status**, exactly like
+  [api-images-v1-report](api-images-v1-report-wire-shape.md).
+- The 2025 rule quoted above — "the helper carries a leading `friendlyActionDescription`, therefore
+  the route is enveloped" — **does not hold on 2026**: every 2026 send takes a description, so it
+  carries no information. That is the documented 2026 retirement of the heuristic, not a
+  contradiction of the 2025 finding.

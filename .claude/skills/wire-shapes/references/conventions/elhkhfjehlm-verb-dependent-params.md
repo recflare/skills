@@ -156,6 +156,32 @@ Each family has the same three overloads — `(string, string)`, `(string, DateT
 `(string, IReadOnlyList<T>)`, `(string, object)` — so they are easy to mistake for one another in a
 slot dump. **Read the method name, not just the param literal.**
 
+
+### The two trailing `bool`s on the string overload are *skip-if-blank* gates
+
+Added **2026-10-26** from
+[account-recoverpassword](../endpoints/account-recoverpassword-wire-shape.md). All three families'
+`(string name, string value, …)` overloads forward to the explicit-list overload
+**`NJPEKLKCVCG`** **`0x9538080`**, whose head is:
+
+```
+0x95380f1  test rdi, rdi                  ; value == null        -> skipped UNCONDITIONALLY
+0x95380f4  je   0x95381d0
+0x95380fa  cmp  byte [rsp+0x70], 0        ; arg4 (bool)          -> if set, skip when
+0x9538106  call System.String$$IsNullOrEmpty                     ;   IsNullOrEmpty(value)
+0x9538113  cmp  byte [rsp+0x78], 0        ; arg5 (bool)          -> if set, skip when
+0x953811f  call System.String$$IsNullOrWhiteSpace                ;   IsNullOrWhiteSpace(value)
+```
+
+So the signature reads `NJPEKLKCVCG(string name, string value, bool skipIfNullOrEmpty,
+bool skipIfNullOrWhiteSpace)`.
+
+**How to apply:** read the two immediates at the call site. With **both `false`** — the common case,
+e.g. `ResetPassword` at `0x94E1484` — an **empty or whitespace string is still transmitted**, so the
+server receives a present-but-empty field (`email=`) rather than a missing one, and must validate it
+itself. A `null` value is dropped either way, so a param that is absent from a live capture does not
+prove the client never adds it.
+
 ### How to avoid the mistake this note exists for
 
 In a `slots2025.py` dump the adder appears either as a resolved `call -> RecNet.RGBOOBRDHEB$$<NAME>`
@@ -181,3 +207,60 @@ So the verb-dependent rule still covers the overwhelming majority, and **no othe
 ⚠️ **The `KTGGWMNSEXK` count is an undercount.** The `IReadOnlyList<T>` overloads are generic-shared,
 so a call reached through a methodSpec (as `descriptors` is in `d__35`, via inst #862) is invisible
 to `callxref`, which scans direct `call rel32` only. Treat 1 as a floor, not the total.
+
+## The generic `IReadOnlyList<T>` overload — verb-dependent too, and it REPEATS the key
+
+Read **2026-10-28** from [inventions-v2-batch](../endpoints/inventions-v2-batch-wire-shape.md).
+`NJPEKLKCVCG<T>(string name, IReadOnlyList<T> values)` **`0x3E51520`** was previously only known to
+exist. It is not a side-forcing overload — it makes the same verb test as the bare one:
+
+```
+0x3e515b2  mov rax,<HttpMethod statics> ; mov rdx,[rax+0x20] ; mov rdx,[rdx+8]   ; HttpMethod.Get
+0x3e515bc  mov rcx,r14                  ; r14 = request->JLFBPBGZQJS (verb field, +0x10)
+0x3e515c7  call HttpMethod::op_Equality
+0x3e515dc  lea r9,[rdi+0x28]            ; GXDEVTXLNLF = query-string list
+0x3e515e8  jne 0x3e515ee                ; verb == GET -> keep +0x28
+0x3e515ea  lea r9,[rdi+0x30]            ; otherwise   -> ODWNBEXQFEH = form-urlencoded body list
+```
+
+then hands the chosen list to the explicit-list overload **`0x3E51350`**, which is a plain
+`for (i = 0; i < values.Count; i++)` that **boxes each element and calls the single-value
+`NJPEKLKCVCG(string, object, List<KVP>)` `0x9538350` once per element** (`0x3E514AE`, back-edge
+`0x3E514B9`).
+
+➡️ **A list parameter goes on the wire as the key repeated**, `id=1&id=2&id=3` — never
+`id=1,2,3`, never a JSON array, never `ids=`. A null list adds nothing at all
+(`0x3E51382 test rbx,rbx; je`), so the parameter is simply absent rather than empty.
+
+## Batch routes choose GET or POST from the item count — so BOTH verbs are live
+
+Same source. The batch/bulk service calls do not have a fixed verb. They call
+
+```
+RecNet.HBEADHYKUCU.GCPOFRCEWMT(int count, int threshold) -> HttpMethod   0x9551FC0
+  0x9551ff1  cmp edi, ebx ; jge …                  ; count >= threshold ?
+  0x955203b  [statics+0x20]+0x08 -> HttpMethod.Get   ; count <  threshold
+  0x9552099  [statics+0x20]+0x20 -> HttpMethod.Post  ; count >= threshold
+```
+
+with `count` read off the id collection (interface slot 0 = `get_Count`) and `threshold` a literal
+`mov edx, 0x64` = **100** at the only site read so far. Combined with the rule above, that means one
+route serves **two different request encodings**:
+
+| count | request |
+|---|---|
+| 1 … 99 | `GET <path>?id=1&id=2…` |
+| ≥ 100 | `POST <path>` · `application/x-www-form-urlencoded` · `id=1&id=2…` |
+
+⚠️ Two consequences for the server. **Route both verbs to the same handler and read the ids from
+query *or* form**, or the rare large batch breaks in a way no amount of small-batch testing shows.
+And **do not take a captured POST as the route's verb** — a packet capture taken while a big batch
+flushed is what makes a route look POST-only.
+
+The batch family is enumerable: `callxref` on `RGBOOBRDHEB.NUIBPXHZBHT()` **`0x9538730`** (which
+every one of them calls, to set the `Nullable<int>` `SITKKODGYPP` at `+0x58` to 2) gives **26** sites
+on `20260323.14`, and their state-machine names are unobfuscated — `GetAccountsBulkServiceCall`,
+`GetInventionsBulkServiceCall`, `GetCurrentOutfitsBulkServiceCall`, `GetSavedOutfitsServiceCall`,
+`GetUGCPurchasableItemsByIdsServiceCall`, `GetPurchaseOffersForCurrencyBatchAsync`,
+`GetSimpleSummariesOfInstancesOfRooms`, and so on. Assume the pattern for all of them; confirm
+before writing any one of them down.
