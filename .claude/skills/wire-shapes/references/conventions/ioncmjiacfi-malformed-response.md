@@ -43,3 +43,45 @@ Correct empty responses for the array endpoints derived so far: `[]`, not `{}`. 
 
 **How to apply:** the exception names no endpoint. Correlate with the server access log for the
 request immediately preceding it, then check whether that route's shape is an array/scalar.
+
+# ✅ 2026 (`20260323.14`): same rule, new names — and the inner exception tells you the direction
+
+Re-confirmed **2026-10-30** from a live `Player.log`. On 2026 the exception type is spelled out:
+**`RecNet.RecNetMalformedResponseException`**, and the deserialize step is
+**`RecNet.RGBOOBRDHEB.AIYNPFIEYFY<T>(RecNet.XJAFUXFVGPU response)`** — generic-shared, the
+reference-type body spanning `0x6c6ce10`–`0x6c6d30a` (`methods.pkl` mislabels it
+`UnityEngine.Localization.Tables.AssetTableEntry$$set_PreloadAsyncOperation`; attribute with
+`fstart.py`, not by window):
+
+```
+0x6c6d135  deserialize the body into T
+0x6c6d239  'Deserialization returned null'   literal 0xFDDD6E0
+0x6c6d24e  new System.Exception(msg)                      ; the INNER exception
+0x6c6d28f  XJAFUXFVGPU$$AFXLACYVZDU                       ; re-read the body as a string
+0x6c6d2bb  new RecNetMalformedResponseException("Malformed Response: '" + body + "'")
+```
+
+`'Malformed Response: <body>'` is only the wrapper — **read the inner exception to learn which way
+the mismatch runs**:
+
+| body | inner exception | what `T` is |
+|---|---|---|
+| `{}` | `Exception: Deserialization returned null` | a **list / array / scalar** — serve `[]` (or the scalar) |
+| `[]` | `JsonParsingException: expected:'{', actual:'[', at offset:0` | an **object** — serve `{…}`, or the envelope |
+
+Both forms appeared 90 s apart in one session, so a log with several of these can carry both
+directions at once; do not assume every `Malformed Response` in a session is the same route.
+
+2026 send-helper names for the frames above the deserialize (on `RecNet.RGBOOBRDHEB`):
+`ZWUODKCINOA<T>(ct)` response required (2025 `HPBKMCLEANE`), **`LIRIDCJIGGA<T>(bool, ct)` nullable
+response** (2025 `CJBFDPLCIEJ`), `JEYAQXBXMRA(ct)` no response, with
+`YGADVOMHRVJ<T>` / `TZATELUBAOF<T>.MUKIUKVCLOC` as the retry/await plumbing beneath them.
+
+⚠️ **If the task was fire-and-forget the stack has no application frame at all** — it ends at
+`LIRIDCJIGGA<TResponse>` and is surfaced by `RecRoom.Async.XKMSFCDUWSV<T>.IQQWXDIHGCW(Task<T>)` →
+`SAXZOKINUQZ.KSNTDCQPEQA`. There is then nothing in the log to identify the route, so derive the
+candidate routes from the UI action instead; worked example in
+[avatar-trial-item-pricing-chain-2026](../endpoints/avatar-trial-item-pricing-chain-2026.md).
+
+⚠️ **`Player.log`'s bracketed clock ran 3 h behind UTC** on this machine — the Dissonance lines
+carry a parallel UTC stamp, so use those when matching a server access log.

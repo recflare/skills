@@ -3,6 +3,15 @@
 > GET api/playerevents/v1/all/{accountId} (svc 2 API) takes NO params and returns a BARE OBJECT {Created, Responses} — Created is a list of the 17-key v1 PlayerEvent, Responses is a list of {PlayerEvent, PlayerEventResponse} PAIRS. Every post-deserialize hook in the tree is null-tolerant.
 
 Derived **2026-09-30** from build `20250718.01`.
+
+> ⚠️ **There is a second, id-less route with almost the same path.** `api/playerevents/v1/all` (no
+> trailing segment) is a **separate literal and separate facade method** — the local player's own
+> events, `GetLocalPlayerEventInfo` — documented in
+> [playerevents-v1-all-local](playerevents-v1-all-local-wire-shape.md). Same response DTO, no id.
+> That note also records the **2026** differences that apply to *this* route too: the facade was
+> rewritten (`RecNet.Events.BFKPNJRKYIX` + a `RecNet.Events.Client` cache layer), the DTOs are now
+> unobfuscated, **the four null-tolerant hooks below are gone on 2026**, and `Responses: null`
+> therefore **throws** there. Treat the "all four hooks are null-tolerant" section as 2025-only.
 Siblings: [playerevents-v1-room](playerevents-v1-room-wire-shape.md), [playerevents-v1-responses](playerevents-v1-responses-wire-shape.md),
 [playerevents-v2](playerevents-v2-wire-shape.md), [playerevent-tags-build-difference](playerevent-tags-build-difference.md).
 

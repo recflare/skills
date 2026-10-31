@@ -215,6 +215,52 @@ collapse**:
 | `0x9537A00` `JEYAQXBXMRA` | — | body **never parsed** |
 | no collapse at all | — | **bare** |
 
+### ⚠️ On 2026 a "friendly description" string is a LOG LABEL, not an envelope marker
+
+Added **2026-10-29** from
+[clubs-account-created](../endpoints/clubs-account-created-wire-shape.md).
+
+The 2025 rule at the top of this file — *a leading `friendlyActionDescription` on the send helper
+means enveloped* — **does not survive to 2026 and will mis-tier routes if applied.** On 2026 the
+description string is consumed by a family of log-on-failure decorators on the same class that holds
+the envelope collapse, which is why they look alike at a call site:
+
+```csharp
+// RecNet.KGLKSSUUEOH — the ENVELOPE collapse (presence of this = enveloped)
+static MPVTAJGPRUT<T>   FQWUEPYTLAQ<T>(MPVTAJGPRUT<RecNetResult<T>> a)
+static NXPIPFBMDQY      FQWUEPYTLAQ(MPVTAJGPRUT<RecNetResult> a)
+
+// …and the LOGGING decorators (presence of these says NOTHING about the tier)
+static MPVTAJGPRUT<T>   XXATRYZHEBX<T>(MPVTAJGPRUT<T> a, RecRoom.Log b, string c)
+static MPVTAJGPRUT<T>   JCYQMVCDGYK<T>(MPVTAJGPRUT<T> a, RecRoom.Log b, string c)
+static MPVTAJGPRUT<T>   BOOMBAMSRGA<T>(MPVTAJGPRUT<T> a, RecRoom.Log b, string c)
+static MPVTAJGPRUT<T>   CTYIKGXZXVO<T>(MPVTAJGPRUT<T> a, string b)
+```
+
+➡️ **Tell them apart by the signature, not by the string.** A decorator is
+`MPVTAJGPRUT<T> -> MPVTAJGPRUT<T>` and takes a **`RecRoom.Log`**; the collapse is
+`MPVTAJGPRUT<RecNetResult<T>> -> MPVTAJGPRUT<T>` and takes none. Each also has a `Func<string>`
+overload for a lazily-built message, so the literal may be built in a closure rather than passed
+inline.
+
+Worked case: `RecNet.Clubs.PUHCOEPRIYA` carries the literal
+`'Failed to GetPlayerCreatedClubs'` straight into `XXATRYZHEBX<List<Club>>` — on the 2025 heuristic
+that reads as enveloped, and it is **bare** (no `FQWUEPYTLAQ`, no `RecNetResultListObject_Club`).
+The description names what to say *if the promise faults*, nothing about the body.
+
+⚠️ **The oracle above is INCOMPLETE for primitive `T`.** Corrected 2026-10-30 from
+[dormroom-me-put](../endpoints/dormroom-me-put-wire-shape.md). `bool`/`Guid`/`int`/`long`/`string`
+are wrapped in a **separate family, `RecNet.RecNetResultPrimitive<T>`**, with concrete types
+`RecNetResultPrimitiveBoolean / Guid / Int / Long / String`. `mfind RecNetResultObject_` returns 0
+for these even when the route is enveloped. `PUT dormroom/me` returns `Task<long>`, had 0
+`RecNetResultObject` hits, and **is enveloped**. A bare number threw
+`expected:'{'` in formatter `RAWAXOIPGST` (`RecNetResultPrimitive<long>`). Wire keys are the same four:
+`Value, Success, Error, error_id`.
+
+So a 0 from the oracle proves "bare" **only** for a non-primitive `T`. For a primitive `T`, a 0 here
+says nothing. Read the description-carrying facade helper instead. On the Rooms facade,
+`DFMBMRNABHU.LKVNIZZZQYH<T>` unwraps `RecNetResultPrimitive<T>` internally.
+
 ⚠️ Two cautions. The oracle says *a* `RecNetResult<T>` is deserialized somewhere, not *which* route
 does it — it is decisive only when `T` appears on a single route (check with `callxref` on the DTO's
 formatter or the facade). And a **0** result can only ever be read as "no enveloped instantiation

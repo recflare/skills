@@ -46,7 +46,10 @@ Decompress first, and always run a positive control before believing an absence.
 ## Reading a crash
 
 `unity-log-facade-frames` - the top five frames of any Rec Room Unity stack trace are the logging
-facade and carry no information. Start at the sixth.
+facade and carry no information. Start at the sixth. For an **obfuscated async frame**, the same
+file has the two-command de-obfuscation: `slots2025.py` the method, then `ginst.py --method <n>` on
+its `AsyncTaskMethodBuilder::Start` methodSpec, which prints the surviving
+`<RealMethodName>d__N` state-machine name (and `--class` gives the return type).
 
 ## What survives a client upgrade
 
@@ -64,4 +67,4 @@ never carry an obfuscated name across a build.
 | [protobuf-descriptor-recovery](references/protobuf-descriptor-recovery.md) | Rec Room's protobuf types keep their REAL names: protoc embeds the whole FileDescriptorProto as 60-char base64 literals that the generated <File>Reflection..cctor passes to string.Concat. Take the `mov` run from names.py on that cctor (literal-table order is NOT concat order) and you recover exact message/field/enum names - the protobuf analogue of msig.py. |
 | [two-client-builds-name-check](references/two-client-builds-name-check.md) | TWO client builds are in play — recflare-2025 (20250718.01, MGPBDIAGCFD/IONCMJIACFI) and recflare-client (2026-07-23, BGBHKBJEMPI/HEBOAMGAJAG). Check which one a stack trace belongs to BEFORE resolving any obfuscated name. |
 | [unity-bundle-text-scanning](references/unity-bundle-text-scanning.md) | bundlescan.py + lz4b.py decompress Rec Room's LZ4 addressable bundles in pure Python and grep them for text — 2745 (2025, UnityFS v8) in ~85 s, 6499 (2023, v7) in ~168 s. CORRECTED 2026-09-23: align on version>=7, NOT flags&0x200, or every v7 bundle decodes empty and the scan reports a clean hits=0. |
-| [unity-log-facade-frames](references/unity-log-facade-frames.md) | In Rec Room Unity-side stack traces the top 5 frames are always the logging facade (DFFFAEKJJHP / CFGDDKLPHOL`1 / HDOEMDBOEDB) — noise. The first real frame is the one below them; room-gameplay components keep their real names. |
+| [unity-log-facade-frames](references/unity-log-facade-frames.md) | In Rec Room Unity-side stack traces the top 5 frames are always the logging facade (DFFFAEKJJHP / CFGDDKLPHOL`1 / HDOEMDBOEDB) — noise. The first real frame is the one below them; room-gameplay components keep their real names. ALSO: de-obfuscate an async frame by reading the `<RealName>d__N` state machine off its `AsyncTaskMethodBuilder::Start` methodSpec (`slots2025.py` + `ginst.py`), why each async frame prints twice, and how to read a multi-block `FormattedAsyncException`. |

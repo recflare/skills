@@ -100,3 +100,58 @@ completely separate facade (`LINCNKPIJDN`, service 2 API,
 Ownership is decided separately by `api/playeritems/v1/isavataritemowned/bulk` and
 `api/playeritems/v1/isavataritemowned/{0}/{1}`; the CAI equivalent is
 `econ/customAvatarItems/v1/owned`.
+
+# ✅ 2026 (`20260323.14`): facade renamed, five routes unchanged — and `defaultunlocked` gates FBA
+
+Re-checked **2026-10-30**. Same five routes, same bare array, still service **28 Econ**
+(`mov r8d, 0x1c` at `0x9499712` in the `defaultunlocked` builder).
+
+| 2025 | 2026 |
+|---|---|
+| facade `OGAEDNMDDLF` | **`RecNet.DYSPCBGIIOA`** (`.ctor` takes `NSEJPLSROWY legacyAvatarItemDescSerializer`, `KJSSLRVSDKB runtimeMapperProvider`) |
+| element DTO `BGJHOEKDNED` | **`RecNet.TFDFUXKLDZH`** |
+| runtime model `LOFDJEDAGHN` | `RecNet.AvatarItemDetails` (compared by `DYSPCBGIIOA$$RNWIUYJLIXX(AvatarItemDetails, TFDFUXKLDZH)` `0x94994A0`) |
+| `NPHONPGHNPF` desc | `RecRoom.AssetIds.AvatarItemDesc` |
+
+| 2026 method | RVA | route |
+|---|---|---|
+| `XSKXZUSXGVK()` | `0x9499A30` | `api/avatar/v4/items` (literal `0xFC42118`) |
+| `UEPYCVXKDPN()` | `0x94997B0` | `api/avatar/v1/defaultbaseavataritems` (`0xFC40698`) |
+| `TECOASWPAHN(ct)` | `0x9499620` | `api/avatar/v1/defaultunlocked` (`0xFC409E8`) |
+| `OURSPLCYJEW(List<AvatarItemDesc>)` | `0x94990B0` | `api/avatar/v1/lockeditems` (`0xFC40D38`) |
+| `GXSFWRJLRWO(List<AvatarItemDesc>)` | `0x9498D40` | `api/avatar/v1/lockeditems/bulk` (`0xFC41088`) |
+
+The first four return `MPVTAJGPRUT<List<TFDFUXKLDZH>>` / `Task<List<TFDFUXKLDZH>>`; the declared
+type no longer lies on 2026 (it names the wire DTO directly), but still read `T` off the send
+generic. ⚠️ `callxref` finds **0 callers** for all of them — the facade is injected through UJect
+and every consumer calls it by interface, so trace consumers by literal or by DI, not by `callxref`.
+
+## ⚠️ An incomplete `defaultunlocked` list silently breaks the Full Body Avatar swap
+
+Confirmed on a live server **2026-10-30**: an FBA swap failed with a checkout dialog demanding
+payment of **0**, and the fix was **adding the missing FBA items to the default avatar-item list** —
+not any change to the pricing routes that actually threw.
+
+Why: `RecRoom.Avatars.Outfit.OutfitManager` fills the body-type defaults from the **shipped**
+`AvatarItemWardrobeRuntimeConfig`, then filters with `TryGetRandomUnlockedItem` — and *unlocked* is
+what these routes decide:
+
+- `TryGetDefaultTorsoItem(out AvatarItem, RecRoom.Protobuf.AvatarBodyType, bool)` `0x1599130`
+- `TryGetDefaultLegsItem(out AvatarItem)` `0x1598CD0` — **FBA-only slot**
+- `TryGetDefaultShoesItem(out AvatarItem)` `0x1598F00` — **FBA-only slot**
+
+With nothing unlocked for those slots the editor falls back to browsable (unowned) items,
+`OutfitManager.IsTrialItem` turns true, and the trial-item pricing chain runs and fails — see
+[avatar-trial-item-pricing-chain-2026](avatar-trial-item-pricing-chain-2026.md).
+
+➡️ **Legs and shoes do not exist on the classic body**, so a defaults list that looks complete for
+classic can still be missing everything FBA needs. Cover every `AvatarBodyType`, not just the one
+you tested with.
+
+The download step is `OutfitManager$$DownloadDefaultAvatarItems(ct)` `0x158E400`
+(`<…>d__66$$MoveNext` `0x15BCD80` → `OutfitManager$$MURLXFKYQPG(List<TFDFUXKLDZH>, bool)`
+`0x1595170`). A **hard** failure there is a *login* blocker, not an FBA bug:
+`<DownloadDefaultAvatarItems>d__243` `0xFE91D0` raises `LOGIN_CODE_BLOCK` (19) at `0xFE948C` →
+`Unable to login (code: block)`
+([login-error-code-words-2026](../../../rr-client-bringup/references/login-error-code-words-2026.md)).
+A list that is present but incomplete boots fine and only breaks the swap.
