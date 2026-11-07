@@ -5,6 +5,21 @@
 Read **2026-08-22** from build `20250718.01`, after the client reached a stable plaintext NGO
 session. Follows [ngo-fork-batch-and-approval](ngo-fork-batch-and-approval.md) and [voice-roster-account-id](voice-roster-account-id.md).
 
+## ✅ Dissonance's own client id is a `ushort` (2026, build `20260323.14`)
+
+Confirmed **2026-11-06**: inside the Dissonance packet the player/client id is **16-bit**, unchanged
+from stock — `Dissonance.Networking.ClientInfo.<PlayerId>k__BackingField : ushort` (typedef #47889,
+fields `PlayerName` string, `PlayerId` **ushort**, `CodecSettings`), and
+`Dissonance.Networking.ClientIdCollection` holds `List<string>` + **`List<ushort>`** +
+`IEnumerable<KeyValuePair<ushort, string>>`. So three different widths are in play on this wire and
+must not be confused:
+
+| id | width | where |
+|---|---|---|
+| `NamedMessage.Hash` (the `NamedMessageType`) | **u16** | NGO frame header |
+| NGO `OwnerClientId` / transport clientId | **u64** | NGO batch header, `RecRoom_SetEncryptionInfo` |
+| Dissonance `ClientInfo.PlayerId` | **u16** | inside the `0x8bc7` Dissonance packet |
+
 ## NamedMessage is NOT stock
 
 `Unity.Netcode.NamedMessage` fields: **`Hash` is a `ushort`** @struct 0, `SendData` @8,

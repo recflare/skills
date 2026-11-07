@@ -21,6 +21,17 @@ Call chain in the stack: `CBACIMLIBPF.KOMEOKGFOBP` (queue drain) → `CBACIMLIBP
 their values**) → `MGPBDIAGCFD.ECHPAADCNOI<TResponse>` → `<>c__44<TResponse>.GLCPIAEHOMD` (the
 `HPBKMCLEANE<T>` "response required" lambda) → `KKEIDMPEHAL<T>`.
 
+⚠️ **CORRECTION 2026-11-06 — on 2026 the `{}` rule below is WRONG.** Build `20260323.14` emits
+`if (reader.ReadIsEndObject()) return null;` in **850 of 910** generated object formatters, so `{}`
+deserializes to `null` for a plain DTO class too and raises the same
+`Deserialization returned null`. `Malformed Response: '{}'` therefore says **nothing** about whether
+`T` is an object, a list or a scalar — resolve `T` from the methodSpec instead. Worked example:
+[econ-campuscard-updateandgetsubscription](../endpoints/econ-campuscard-updateandgetsubscription-wire-shape.md)
+(`T` = a 2-key object DTO, still fails on `{}`). Full derivation:
+[empty-json-object-deserializes-to-null](empty-json-object-deserializes-to-null.md). The section
+below still describes `20250718.01` correctly, and the `[]` half of the 2026 table further down is
+unaffected.
+
 ## `Malformed Response: '{}'` is a strong signal
 
 `{}` is valid JSON, so it only fails when `T` cannot be built from a JSON **object**:
@@ -66,7 +77,7 @@ the mismatch runs**:
 
 | body | inner exception | what `T` is |
 |---|---|---|
-| `{}` | `Exception: Deserialization returned null` | a **list / array / scalar** — serve `[]` (or the scalar) |
+| `{}` | `Exception: Deserialization returned null` | ⚠️ **UNDETERMINED** (corrected 2026-11-06) — object, list or scalar all produce this. See [empty-json-object-deserializes-to-null](empty-json-object-deserializes-to-null.md). |
 | `[]` | `JsonParsingException: expected:'{', actual:'[', at offset:0` | an **object** — serve `{…}`, or the envelope |
 
 Both forms appeared 90 s apart in one session, so a log with several of these can carry both

@@ -58,7 +58,7 @@ then `solve_header.py` → `idtables{,2,3}.py` → `rebuild_metadata.py` → `re
 
 ## Already derived
 
-**[`references/CATALOG.md`](references/CATALOG.md)** — 169 routes, one file each, indexed by service
+**[`references/CATALOG.md`](references/CATALOG.md)** — 171 routes, one file each, indexed by service
 and path. Grep it before deriving anything. (`PROMPTS.md` at the repo root has ready-made openers for
 looking one up, deriving a missing one, and checking a live capture against the client.)
 
@@ -68,7 +68,8 @@ looking one up, deriving a missing one, and checking a live capture against the 
 |---|---|
 | [2025-facade-helper-tiers](references/conventions/2025-facade-helper-tiers.md) | On 20250718.01 the FACADE helper decides the envelope, not the MGPBDIAGCFD request methods: PJPLCMBOAFB (carries a friendlyActionDescription) is ENVELOPED and unwraps Value; NDBMFFLDBBK/LMKONLJOAEP are BARE. Reads and writes on the SAME path differ. A route can be bare on 2026 and enveloped on 2025 with an identical DTO. |
 | [elhkhfjehlm-verb-dependent-params](references/conventions/elhkhfjehlm-verb-dependent-params.md) | CORRECTION: MGPBDIAGCFD.ELHKHFJEHLM is NOT a query-param adder — it branches on the verb. GET puts params in the query string; every other verb puts them in an application/x-www-form-urlencoded BODY. |
-| [ioncmjiacfi-malformed-response](references/conventions/ioncmjiacfi-malformed-response.md) | IONCMJIACFI 'Malformed Response' in recflare-2025 is thrown by MGPBDIAGCFD.KKEIDMPEHAL<T> when the body is empty or fails to deserialize into T — a '{}' body means the endpoint expects an ARRAY or a scalar, not an object. |
+| [ioncmjiacfi-malformed-response](references/conventions/ioncmjiacfi-malformed-response.md) | IONCMJIACFI 'Malformed Response' in recflare-2025 is thrown by MGPBDIAGCFD.KKEIDMPEHAL<T> when the body is empty or fails to deserialize into T — a '{}' body means the endpoint expects an ARRAY or a scalar, not an object. ⚠️ **That '{}' rule is 2025-only — corrected for 2026 by the next row.** |
+| [empty-json-object-deserializes-to-null](references/conventions/empty-json-object-deserializes-to-null.md) | **2026 `20260323.14`: `{}` deserializes to `null` for EVERY object DTO** — 850 of 910 generated Utf8Json formatters emit `if (reader.ReadIsEndObject()) return null;` after the begin-object verify (`KKLKLRLWGGJ` ReadIsNull / `IDIIQOMHLBZ` '{' verify / `KMTQGEAVNZE` '}' / `PEPQTDIXVGN` '}'+count, 0xA513620/0xA5132C0/0xA5136E0/0xA514290). `AIYNPFIEYFY<T>` 0x6C6F280 then throws `Deserialization returned null`, rethrown as `Malformed Response: '{}'`. So `{}` says NOTHING about whether T is an object, list or scalar, and the minimum valid body for an object route is ONE key — serve `{"Field":null,…}`, never `{}`. Includes the image-wide scan and the exact throw sites. |
 | [llcldppagij-envelope-failure-exception](references/conventions/llcldppagij-envelope-failure-exception.md) | LLCLDPPAGIJ is recflare-2025's generic 'RecNet envelope reported failure' exception — thrown only when an ENVELOPED response is null or Success==false, never by a bare-DTO endpoint. |
 | [number-token-parsing-exception](references/conventions/number-token-parsing-exception.md) | Utf8Json NKJABNHBPCA "expected:'Number Token', actual:'['" is NOT IONCMJIACFI — it means T is a bare `long?`. Exactly two routes in 20250718.01 are: GET dormroom/me (Rooms) and GET api/progressionEvents/active (API). |
 | [nonobject-response-routes](references/conventions/nonobject-response-routes.md) | The 145 routes whose response T is a List or scalar — i.e. every endpoint that hard-fails with `Malformed Response: '{}'`. Generated table at il2cpp-2025/nonobject-responses.txt, plus the scan that rebuilds it. |

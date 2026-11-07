@@ -376,6 +376,15 @@ travels as the member *name*.
 | `BMLPAEEDGDK` (change listener) | **`JKEEZMLERNO` `0xA253210`** |
 | `RoomPermissionModel.MCKOCLIDLPO` etc. | `RRUI.Data.RoomPermissionModel` — **fully unobfuscated** (`Set` `0x287DD60`, `OnPermissionsUpdated` `0x287D9D0`, `IsFieldRequestInProgress` `0x287D970`, `RefreshInternal` `0x287DA10`, `get_DefaultRoomRole` `0x287EFB0`) |
 
+⚠️ **CORRECTION 2026-11-02 — the Room DTO's keys are NOT unchanged.** The "shapes UNCHANGED" claim
+above holds for `PhotonAccessTokenAndPermissionsDTO` and `RolePermissionDTO`, but **not** for the
+`RoomDetailsDTO` in `Value`. Its 2026 formatter is
+`Utf8Json.Formatters.RecNet.Rooms.XZXZTXGVWHY` `.ctor 0x8EE19C0` and still emits **63** keys, but
+**`ToxmodEnabled` is gone** (0 refs anywhere in the formatter) and **`BoostCount` is appended as the
+last key**. Full 2026 run, plus the `[DataMember]` snapshot-id renames and the keyless
+`UnlistedSubroom` field, in
+[rooms-subrooms-default-matchmaking-policy](rooms-subrooms-default-matchmaking-policy-wire-shape.md).
+
 Enum values are **identical** to the 2025 tables — `AccountRoleType` is still the sparse
 `0,1,10,20,25,30,31,255`, `RolePermissionType` still `Bool 0 / Int 1 / StringList 2`, and
 `RolePermission` still carries the same 42 members at the same values.

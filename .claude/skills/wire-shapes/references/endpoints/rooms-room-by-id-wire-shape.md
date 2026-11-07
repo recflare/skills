@@ -113,6 +113,14 @@ then the base Room:
 62 UgcSubVersion            63 MinUgcSubVersion
 ```
 
+> ⚠️ **On 2026 (`20260323.14`) this list is one key off.** The type is
+> `RecNet.Rooms.RoomDetailsDTO`, formatter `Utf8Json.Formatters.RecNet.Rooms.XZXZTXGVWHY`
+> `.ctor 0x8EE19C0`, run `0x8EE3B12`..`0x8EE45F6`. Still 63 keys and the same order, but
+> **`ToxmodEnabled` (#54) was removed** and **`BoostCount` was appended as #63**. The four
+> snapshot keys are `[DataMember]` renames of `*RoomLoadSnapshotId` fields, and
+> `UnlistedSubroom` has a backing field with no key. See
+> [rooms-subrooms-default-matchmaking-policy](rooms-subrooms-default-matchmaking-policy-wire-shape.md).
+
 `.HGMJJMJDHLJ` declares **30** fields; the run is **63** keys, so this is a subclass chain and the
 remaining keys come from its bases. **Per-key CLR types are not pinned** — only the key names and
 order were derived.
@@ -186,9 +194,81 @@ The query param is the literal `'include'` (slot `0xD1F0F38`), built in
 carry `name`, `ugcSubVersion1`, `ugcSubVersion2`).
 
 A captured room load sends **`include=767277`** = `0xBB52D`, bits
-`{0,2,3,5,8,10,12,13,15,16,17,19}`. **The flags enum was not located**, so the bit→key mapping is
-unresolved. Safest server behaviour is to **ignore `include` and return every key** — the client
-drops unknown keys silently, and a missing one it wanted is the failure mode above.
+`{0,2,3,5,8,10,12,13,15,16,17,19}`.
+
+### ✅ RESOLVED 2026-11-04 — the flags enum is `RoomDetailFeatureMask`, and 767277 is a NAMED alias
+
+An earlier revision of this note said "the flags enum was not located". It is
+**`RecNet.Rooms.RoomDetailFeatureMask`** (2026 typedef #23485, `int`) — and on 2025 the same enum is
+`.JNGOLEECHPB` (typedef #23144) with **byte-identical members and values**, so this section applies
+to both builds. Found by scanning every enum typedef for members named `SubRooms`/`Tags`/`LoadScreens`
+rather than by guessing the type name; enum member names and values survive the obfuscator.
+
+**`767277` is not an ad-hoc number — it is the enum's own `StandardDetails` member.** The client
+hardcodes that one immediate and never computes a mask:
+
+```
+py immfind.py 767277
+  0x95B625C  JUUTUQGAYFD$$TBQSRACEFUX +0x9c   # the by-NAME route   (params: name, include, usv1, usv2)
+  0x95C5E20  VBVXDSOHTWJ$$TBQSRACEFUX +0x60   # the by-ID route     (params: include, usv1, usv2)
+py immfind.py 265354   ->  0 hits             # ReplicationDetails is never sent by the client
+```
+
+(Both closures are the `'include'` literal's only code refs — slot `0xFD6AFB8` on 2026.
+⚠️ **2026 renamed the sub-version params**: 2025's `ugcSubVersion1`/`ugcSubVersion2` are now
+**`usv1`/`usv2`**.)
+
+| value | member | gates these wire keys |
+|---|---|---|
+| 0 | `None` | — |
+| **1** | **`SubRooms`** | `SubRooms` |
+| 2 | `SubRoomsWithMatchmakingSettings` | adds each subroom's matchmaking settings — the default policy written by [rooms-subrooms-default-matchmaking-policy](rooms-subrooms-default-matchmaking-policy-wire-shape.md) |
+| **4** | **`AccountRoles`** | `Roles` |
+| **8** | **`Tags`** | `Tags` |
+| *16* | *(no member — bit unused)* | |
+| **32** | **`PromoContent`** | `PromoImages`, `PromoExternalContent` |
+| 64 | `Scores` | `Stats` |
+| 128 | `ReplicationIds` | per-subroom replication ids |
+| **256** | **`LoadScreens`** | `LoadScreens` |
+| *512* | *(no member — bit unused)* | |
+| **1024** | **`DataBlob`** | `DataBlob`, `DataBlobHash` |
+| 2048 | `UnityAssets` | the `UnityAsset*` keys |
+| **4096** | **`Moderation`** | `LastRoomModerationState`, `CurrentRoomModerationState`, `FlaggedAssets`, `ModeratorMessage` |
+| **8192** | **`PublishedAt`** | `PublishedAt` |
+| 16384 | `CCUs` | `CCU` |
+| **32768** | **`SnapshotIds`** | `CurrentSnapshotId`, `LatestSnapshotId`, `StagedSnapshotId`, `CompatibleSnapshotId` |
+| **65536** | **`RoomBanDetails`** | `RoomBanDetails` |
+| **131072** | **`RoomPublishStateAvailability`** | `PublishStateAvailability` |
+| 262144 | `RoomExperience` | the room-experience data |
+| **524288** | **`RestrictedCircuitsAllowListNames`** | `RestrictedCircuitsAllowListNames` |
+
+Composite members (the enum declares them itself, so they are not separate bits):
+
+```
+StandardDetails     = 767277 = SubRooms | AccountRoles | Tags | PromoContent | LoadScreens
+                             | DataBlob | Moderation | PublishedAt | SnapshotIds | RoomBanDetails
+                             | RoomPublishStateAvailability | RestrictedCircuitsAllowListNames
+MatchmakingDetails  =      2 = SubRoomsWithMatchmakingSettings
+ReplicationDetails  = 265354 = SubRoomsWithMatchmakingSettings | Tags | ReplicationIds
+                             | DataBlob | UnityAssets | RoomExperience
+```
+
+**The bold rows are exactly the 19 derived-first keys of the formatter run, plus `PublishedAt`.**
+That is the point of the derived-first ordering: the `include`-gated members are the derived class's,
+and the always-present base Room follows.
+
+⚠️ **What `StandardDetails` does NOT ask for**, i.e. keys the client does not need on a room load:
+`Stats` (`Scores`), `CCU` (`CCUs`), the subroom matchmaking settings, replication ids, unity assets,
+and the room experience. Bits **16** and **512** have no member at all — server-side flags the client
+has no name for, or removed ones.
+
+**How to apply on the server:** `include` is a pure **projection hint** — it changes which fields the
+server bothers to populate, never the key set or the key order, because the client's formatter is
+fixed and reads whatever keys arrive. So **ignoring `include` and returning every key is always
+safe** (unknown keys are dropped silently; a missing key the client wanted is the failure mode at the
+top of this note). Honour it only as a cost optimisation, and if you do, treat it as a *minimum*:
+`StandardDetails` is the only value the client ever sends, so gating on
+`(include & DataBlob) != 0` is the single check that matters for cloud variables.
 
 ## How this was found
 
