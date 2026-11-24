@@ -256,25 +256,61 @@ data=<opaque>&validHours=168&codeType=5
 `HasValue` branch at the call site — all five are boxed and passed unconditionally — so
 `maxCount` / `extraDataId` simply do not appear in the body. **Treat both as optional.**
 
-## Response — a BARE JSON STRING
+## Response — a BARE JSON STRING holding the FULL SHARE URL
 
 Send is **`RGBOOBRDHEB.ZWUODKCINOA<T>`** with generic inst **#862 = `string`** — the plain tier, so
-**no envelope** ([2026-send-helper-tiers](../conventions/2026-send-helper-tiers.md)). The whole body is the new code as a
-JSON string:
+**no envelope** ([2026-send-helper-tiers](../conventions/2026-send-helper-tiers.md)). The whole body is one JSON string, and
+that string is the **share URL with the code in its `a` query parameter**:
 
 ```json
-"ABC123"
+"https://<share-host>/?a=ABC123"
 ```
 
-**The quotes are required** — Utf8Json's `string` formatter wants a String token, so a bare
-unquoted `ABC123` fails to parse. An empty body raises
+**The quotes are required** — Utf8Json's `string` formatter wants a String token, so an unquoted
+body fails to parse. An empty body raises
 `RecNetMalformedResponseException: Response was empty` before any caller sees it.
 
-**Return the code only, not a URL.** Callers wrap it into `.CodeAndUrl` (typedef #11173:
-`Code`, `Url`, `ChatMessage`, `DeepLink`, `Context`) and build `Url`/`DeepLink` themselves from
-`StorefrontConfig`-sibling `ShareBaseUrl` on `GET api/config/v2`
-([gameconfig-v2-roomkeyconfig](gameconfig-v2-roomkeyconfig.md), field at `0x50`). Returning a full URL here yields a
-double-prefixed link.
+### ⚠️ CORRECTION (2026-11-23): it is a URL, NOT the bare code
+
+Earlier revisions of this note said "return the code only". **That was wrong** and it broke a live
+server (`"MJPRN3"` returned, client rejected the share). The error was reading the transform's
+*name and signature* (`string -> .CodeAndUrl`) without disassembling it. Every `*Code.Create`
+chains **`.CodeAndUrl::EBESUVQFPGF(string a)`** `0xF503B0` (`PlayerEventCode.Create` slot
+`0xF62E5B`/`0xF630B1`, `RoomCode.Create` `0xF651F5`), and that method is:
+
+```csharp
+static CodeAndUrl EBESUVQFPGF(string a) {            // a = the POST actionlink response
+    var q = DMZZPBOAFIF.XXRZVOVXMBW(a);              // 0xF50408 — query-string -> dictionary
+    q.TryGetValue("a", out var code);                // 0xF50428, literal "a"
+    return new CodeAndUrl { Code = found ? code : null,   // +0x00
+                            Url  = a };                   // +0x08 — the response, VERBATIM
+}
+```
+
+`XXRZVOVXMBW` `0xF50C10` does `IndexOf("?")` → `Substring` → `Split` → `Split` — a plain
+query-string parser. So:
+
+- **`Url` is the response string unmodified** — the client does not prefix `ShareBaseUrl` on this path.
+- **`Code` is whatever follows `a=`.** A bare `"MJPRN3"` has no `?`, so `Code` is **null** and `Url`
+  is the non-URL `MJPRN3` — the request 200s, nothing logs `Failed to CreateActionLink`, and the
+  share is unusable.
+
+The sibling **`.CodeAndUrl::JNZPBXORHCR(string a)`** `0xF50470` is the code-first one
+(`Code = a; Url = ActionCodeToUrl(a)`) — it is *not* what the create callers use. Don't confuse them.
+
+**The URL format the client itself produces** is the model to copy.
+`ActionCode.ActionCodeToUrl(code)` `0xF4D560` = `GetAbsoluteShareUrl("")` `0xF59ED0` (the config
+`ShareBaseUrl`, fallback literal `'https://rec.net/{0}'`, formatted with `""`) + helper `0xF4D670`
+appending `?` / `&` + `"a"` + `"="` + code. `ActionCode.ActionUrlToCode(url)` `0xF4D5E0` is the same
+`XXRZVOVXMBW` + `TryGetValue("a")` in reverse. So return exactly:
+
+```
+<ShareBaseUrl with {0} = "">?a=<CODE>        e.g.  "https://rec.net/?a=MJPRN3"
+```
+
+using the same base you serve as `ShareBaseUrl` on `GET api/config/v2`
+([gameconfig-v2-roomkeyconfig](gameconfig-v2-roomkeyconfig.md), field at `0x50`). Only the `a` parameter is read; extra
+query parameters are ignored by the parser.
 
 Re-verified **2026-10-20**: `ZWUODKCINOA<T>(CancellationToken) → Task<T>` (`msig RGBOOBRDHEB`), and
 **every** wrapper in the chain is instantiated over `string` — `SAXZOKINUQZ::CTZMMSFIPBH` `0x94DA0F2`,
@@ -282,9 +318,10 @@ Re-verified **2026-10-20**: `ZWUODKCINOA<T>(CancellationToken) → Task<T>` (`ms
 object or an envelope. Control case: **`POST api/sanitize/v1`**
 ([sanitize-v1](sanitize-v1-wire-shape.md)) is the same bare-string tier and is already working in production.
 
-## 🔍 If the client "does nothing" after a correct `"CODE"`
+## 🔍 If the client "does nothing" after a correct `"<url>?a=CODE"`
 
-A wrong body shape **is not silent on this route.** The facade wraps the promise in
+⚠️ **A bare code instead of a URL IS silent** — it is a valid JSON string, so it parses; see the
+correction above. Check that first. A body that fails to *parse* is not silent: the facade wraps the promise in
 `KGLKSSUUEOH.XXATRYZHEBX(promise, RecRoom.Log, "Failed to CreateActionLink")`, and the rejection
 closure `NECAAMUHRKL.AMKBCLLJLUR` `0x942F5E0` calls **`RecRoom.Log::LIBCEQYQFAM`** (`0x942F702`).
 
@@ -301,11 +338,12 @@ closure `NECAAMUHRKL.AMKBCLLJLUR` `0x942F5E0` calls **`RecRoom.Log::LIBCEQYQFAM`
 share. One failed attempt therefore poisons every later press **in that process**, with no HTTP and
 no log. **Restart the client between server-side fixes on this route.**
 
-⚠️ **Watch for a double-encoded body.** The correct body is the six bytes `"ABC123"` — one JSON
-string. If the server JSON-serialises a string that *already* contains its quotes it emits
-`"\"ABC123\""`, which parses **successfully** into a code containing literal `"` characters: the
-request 200s, nothing logs, and the share URL is garbage. A stray leading quote (`""ABC123"`) is
-instead invalid JSON and throws. Check the raw response bytes, not the framework's view of them.
+⚠️ **Watch for a double-encoded body.** The correct body is one JSON string,
+`"https://<share-host>/?a=ABC123"`. If the server JSON-serialises a string that *already* contains
+its quotes it emits `"\"https://…?a=ABC123\""`, which parses **successfully** into a URL and code
+containing literal `"` characters: the request 200s, nothing logs, and the share is garbage. A stray
+leading quote is instead invalid JSON and throws. Check the raw response bytes, not the framework's
+view of them.
 
 There is **no `MPVTAJGPRUT.Transform` inside the facade** (unlike CHECK/CONSUME) — the raw string is
 what `ZIMIYJQSFBE` resolves with. The *callers* then chain two transforms of their own, e.g.
@@ -313,15 +351,16 @@ what `ZIMIYJQSFBE` resolves with. The *callers* then chain two transforms of the
 
 ```
 Link.ZIMIYJQSFBE(...)                              // MPVTAJGPRUT<string>
-  .Transform<.CodeAndUrl>(.CodeAndUrl::EBESUVQFPGF)      // 0xF651F5 — string -> .CodeAndUrl
+  .Transform<.CodeAndUrl>(.CodeAndUrl::EBESUVQFPGF)      // 0xF651F5 — URL string -> .CodeAndUrl (Code = its ?a= param)
   .Transform<.CodeAndUrl>(.VBVXDSOHTWJ::LZVNVSUGUSS)     // 0xF65236
 ```
 
 `.CodeAndUrl` is a **struct** (typedef #11173; unboxed `Code` 0x00, `Url` 0x08, `ChatMessage` 0x10,
-`DeepLink` 0x18, `Context` 0x20). `Url` comes from `ActionCode.ActionCodeToUrl(code)` `0xF4D560` →
-`LinkManager.GetAbsoluteShareUrl()` `0xF59ED0`, which reads `RecNet.Config` but **falls back to the
-hardcoded literal `'https://rec.net/{0}'`** — so a missing `ShareBaseUrl` cannot null this out, and
-is *not* a candidate cause.
+`DeepLink` 0x18, `Context` 0x20). On the create path `Url` is the **server's response verbatim** and
+`Code` is parsed out of it (see the correction above). `ActionCode.ActionCodeToUrl(code)` `0xF4D560`
+→ `LinkManager.GetAbsoluteShareUrl()` `0xF59ED0` is only used on the code-first path
+(`JNZPBXORHCR`); it reads `RecNet.Config` and **falls back to the hardcoded literal
+`'https://rec.net/{0}'`**.
 
 ## ⚠️ The create result is cached client-side, and the key omits `codeType`
 
@@ -458,7 +497,7 @@ Suggested columns:
 
 | column | source |
 |---|---|
-| `code` (PK) | what you return from `POST actionlink` |
+| `code` (PK) | generated; returned from `POST actionlink` **inside the URL** as `<ShareBaseUrl>?a=<code>`, and the `{code}` segment of CHECK/CONSUME |
 | `data` text | the `data` form field, **verbatim** → `ActionLinkDTO.Data` |
 | `creator_account_id` int | the authenticated caller → `ActionLinkDTO.CreatorPlayerId` |
 | `code_type` int | the `codeType` form field — for your own indexing and consume validation |

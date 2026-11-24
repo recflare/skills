@@ -28,6 +28,13 @@ Dispatcher **`JLKPCEIDEDL.BJNDEFHHIOO(RecRoom.Foundation.ViewId viewId, string m
 [PunRPC]."`, `'Malformed RPC; method name is null or empty'` `0xD2378F0`, `'Received RPC "'`,
 `'" for viewID '`.
 
+> ⚠️ **CORRECTED 2026-11-08 — the wire carries a u16 INDEX, not the name.** A relay sees event 36
+> as `{0: viewId, 1: timestamp, 4: u16 index, 3: params}` with indexes up to 471. The index resolves
+> through Rec Room's own runtime-built table (`List<string>` on `RecRoom.Networking.BDYKBXJFCLW`,
+> from `[RecRoom.Networking.RPC.RPCMethod]`), not PUN's byte-indexed `RpcList` — which is why the
+> PUN index literal below is unreferenced. The "no id table" conclusion is wrong; see
+> [rpc-shortcut-index-and-sender-gates-2026](rpc-shortcut-index-and-sender-gates-2026.md).
+
 So the payload is **ViewId + method-name STRING + boxed arg array** — not an index.
 `'Could not find RPC with index: '` `0xD126C00` exists but has **zero references**, so the
 PUN `RpcList` index optimisation is not in use here.

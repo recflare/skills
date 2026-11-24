@@ -16,6 +16,35 @@ Both routes are svc **19 DataCollection**, POST, `CNDMDLNHDLI` (SendWithNoRespon
 read, any 2xx works. `data/event` body is `{EventType, EventParams}` (both **strings**;
 `EventParams` is escaped JSON). `data/events` is the batched multipart form (`file.bin`).
 
+### 2026 build `20260323.14` — STILL `DataCollection.Enabled`, re-derived
+
+Re-confirmed on build `20260323.14` (RVAs/obfuscated names re-rolled, mechanism identical). The
+general event front door is `RecNet.Data.WILHGNSYVUU$$Event(string eventType[, int accountId])`
+(`0x8D7CA00` / `0x8D7CFF0`); its terminal `<LogAsync>d__9$$MoveNext` `0x8D7AF10` reads game config
+**`DataCollection.Enabled`** (literal `0xFD759D0`, **default `true`** — `mov r9b, 1`) and, when
+false, **early-exits at `0x8D7B09B` (`test al,al; jne; jmp 0x8D7B157`) BEFORE** calling the pipeline
+enqueue `RecNet.Data.FRNWCURICAL$$LYWKAPLYCNM` `0x95CB7A0`. So setting it false stops both
+`data/event` (`<SendEvent>d__16` `0x95DE0F0`) and `data/events` (`<FlushCurrentBatch>d__23`
+`0x95D6320`) at the source — no enqueue, no batch, no POST. `data/event` on 2026 is svc **19**
+(`mov r8d,0x13`), JSON body via `FZNGWUAGAIN`, sent with the **no-response** helper
+`RGBOOBRDHEB$$JEYAQXBXMRA` (`0x95DE3D6`) — response still ignored, so a returned body cannot signal
+"disable"; the flag or the push below is the only client-side off switch.
+
+> ⚠️ **Do not confuse with the AI collectors.** On 2026 the same `DataCollection.Enabled` key is
+> *also* read by `RecNet.Data.WILHGNSYVUU$$ZOJHPRXFKVH` `0x8D7D410`, a bool getter whose only callers
+> are MakerAI/RoomieAI/GameAI (`MakerAISystem..ctor`, `RoomieAIController`, …). Xref'ing *that getter*
+> alone makes the flag look AI-only — it is not; the general path reads the flag directly in
+> `<LogAsync>d__9`. Siblings `GameAI.DataCollection.Enabled`, `MakerAI.DataCollection.Enabled`,
+> `RoomieAI.DataCollection.Enabled` are the per-AI-subsystem gates.
+
+**Config delivery:** these keys are game configs served by **`GET api/gameconfigs/v1/all`** (the
+`RecNet.LGHEBYOBKGV` / `GameConfigAccessRecord` store, `GameConfigs.RefreshAsync`), so the self-hosted
+server sets them. The `Analytics.UseDataCollection` game config (read in `.REBSZBYFAIW$$OGXEZNPSKVL`
+`0xD68220`) is the upstream analytics-routing switch. Per-event-type runtime kill switch is still the
+websocket push **`DataCollectionEventDisabled`**: `RecNet.Data.FRNWCURICAL` subscribes at
+`Initialize` `0x95CB5D0` (handler `QWBDSRMMMFF(.EventDTO)` `0x95CBA40`). Batch-cadence throttles
+`DataCollection.MaxBatchSize` / `.MaxBatchDelaySeconds` are read in `GBAGBPAPVKT` `0x95CB220`.
+
 Per-event-type kill switch: websocket channel **`DataCollectionEventDisabled`**, payload
 `{EventType, ShouldBeSampled}` (formatter `DLAHGGAKEDE` `0x77205E0`), handler
 `ODDMMEODFGD.FACPGDPODIL` `0x7E1BA50` ([notification-types-2025](../../wire-shapes/references/endpoints/notification-types-2025.md)).
